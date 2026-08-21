@@ -39,8 +39,26 @@ DSH ──原生工具──> dsh-cae-agent(Node TCP) ──> Abaqus socket brid
    - `abaqus_ping` → 返回 Abaqus version + 实时信息
    - `abaqus_get_model_info` → 模型/部件/材料清单
    - `abaqus_list_jobs` → 作业清单
-   - `abaqus_run_python`（兜底）→ 如 `result = mdb.models.keys()`
-   - （需已有模型/作业时）`abaqus_set_workdir` / `abaqus_submit_job` / `abaqus_inspect_odb` / `abaqus_monitor_job` / `abaqus_capture_viewport`
+   - `abaqus_run_python` → 如 `result = mdb.models.keys()`
+   - `abaqus_set_workdir` → 切换 Abaqus 工作目录
+5. 建模链验证（可选，逐步）：
+   - `abaqus_create_part` → 建一个 box 部件
+   - `abaqus_instantiate` → 装配实例化
+   - `abaqus_create_set` → 在部件/装配上建集合
+   - `abaqus_create_material` → 定义一个弹性材料
+   - `abaqus_assign_section` → 赋截面
+   - `abaqus_generate_mesh` → 画网格
+   - `abaqus_define_step` / `abaqus_apply_load` / `abaqus_set_bc` → 定义分析步/加载荷/边界
+   - `abaqus_create_interaction` / `abaqus_set_friction` → 接触（多体时）
+   - `abaqus_submit_job` → 提交作业
+   - `abaqus_inspect_odb` / `abaqus_capture_viewport` → 后处理/截图
+
+开发期可先行跑
+```bash
+cd plugin
+node test/smoke.test.mjs     # 20 工具注册 + 分档
+node test/codegen.test.mjs   # 每个工具生成 Python 语法校验
+```
 
 ## 回滚
 
