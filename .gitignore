@@ -59,3 +59,6 @@ MCP/**/status.json
 MCP/**/status.json.tmp
 MCP/**/stop.flag
 MCP/**/mcp.log
+
+# dsh-cae-agent plugin local test deps
+plugin/node_modules/

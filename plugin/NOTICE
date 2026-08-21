@@ -1,0 +1,34 @@
+NOTICE
+======
+
+dsh-cae-agent — a DSH (DeepSeek Harness) Cordis plugin for Abaqus/CAE.
+
+This plugin reuses and adapts open-source work. Per the MIT License, the
+following upstream copyright and attribution notices are preserved.
+
+--------------------------------------------------------------------
+1. CAE-Agent-Hub
+   https://github.com/Cai-aa/CAE-Agent-Hub
+   MIT License
+   Copyright (c) 2026 Thompson Labs
+
+   This DSH plugin adapts the Abaqus operation surface (tool set, model/job/
+   ODB query logic, viewport capture) and the Abaqus-side socket bridge design
+   from the CAE-Agent-Hub "MCP/Abaqus" module.
+
+2. Abaqus-Control-MCP (socket bridge architecture)
+   https://github.com/Whfkl/Abaqus-Control-MCP
+   MIT License
+   Copyright (c) 2026 Abaqus Control MCP Contributors
+
+   The low-latency local TCP socket bridge that this plugin talks to (running
+   inside Abaqus/CAE and dispatching Abaqus Python on the GUI thread) is based
+   on the architecture of Abaqus-Control-MCP, as adopted and rewritten by
+   CAE-Agent-Hub v5.
+
+--------------------------------------------------------------------
+License terms
+
+Both upstream projects are released under the MIT License. The full license
+text is reproduced in LICENSE. This NOTICE is informational and does not
+change the MIT terms under which this plugin is distributed.

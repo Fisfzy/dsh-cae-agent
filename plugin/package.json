@@ -1,0 +1,33 @@
+{
+  "name": "dsh-cae-agent",
+  "version": "0.1.0",
+  "description": "DSH (DeepSeek Harness) Cordis plugin that operates a live Abaqus/CAE session through its local socket bridge. Based on the MIT-licensed CAE-Agent-Hub and Abaqus-Control-MCP.",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js"
+  },
+  "files": [
+    "lib",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "check": "node --check lib/index.js"
+  },
+  "keywords": [
+    "dsh",
+    "cordis",
+    "abaqus",
+    "cae",
+    "fea",
+    "mcp"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-tools": "0.1.1-rc.2",
+    "schemastery": "^3.0.0"
+  }
+}
