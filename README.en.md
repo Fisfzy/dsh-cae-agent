@@ -74,13 +74,6 @@ This project **references and adapts** the **socket-bridge architecture** and **
 - ✅ **Composite/advanced**: `abaqus_define_composite_layup` (**shell composite** `CompositeShellSection`+`SectionLayer`, default SHELL/S4R), `abaqus_define_orthotropic_material`, `abaqus_define_amplitude`, `abaqus_define_predefined_field`, `abaqus_set_output`
 - ✅ **Post-processing**: `abaqus_plot_contour` (viewport contour), `abaqus_export_results_csv` (ODB→CSV), `capture_viewport` + vision read
 - ✅ **Step extension**: `define_step` now supports `heat`/`coupled`
-- ⚠️ Upstream workflow-**guidance SKILLs** (geometry/material/mesh/step/load/bc/static/modal/dynamic/thermal/contact, etc.): this plugin covers the underlying capability with directly-executable native tools, but does not ship the upstream SKILL instruction set
-
-**Deliberate divergence**: composite/laminate uses the **shell** approach (S4R + `CompositeShellSection`), not the upstream `*Solid Section, composite` solid laminate — per project requirement to avoid 3D solid elements. Source contains **no machine-specific/hardcoded paths** (Abaqus command comes from env/config; tests use `os.tmpdir()`).
-- ⚠️ `result_mesh.json` **browser viewer**: not provided (judged low-value)
-- ⚠️ Tosca **shape/topology optimization**: no dedicated tool; use `abaqus_run_python` manually
-
-**Differences:** the upstream `Skill/abaqus/*` instruction tree is not carried along (third-party content not redistributed); several capabilities go further than upstream (full native modeling-write chain, one-command Abaqus launch).
 
 Upstream attribution is preserved in [`plugin/NOTICE`](plugin/NOTICE) and [`LICENSE`](LICENSE).
 

@@ -75,10 +75,6 @@ npm run e2e                              # 真机回归：连 48152 桥跑 19 �
 - ✅ **复合/高级建模**：`abaqus_define_composite_layup`（**壳复合** `CompositeShellSection`+`SectionLayer`，默认 SHELL/S4R）、`abaqus_define_orthotropic_material`（工程常数/正交/各向异性）、`abaqus_define_amplitude`（时变）、`abaqus_define_predefined_field`（初始场/预定义场）、`abaqus_set_output`（场/历史输出）
 - ✅ **结果后处理**：`abaqus_plot_contour`（视口云图）、`abaqus_export_results_csv`（ODB→CSV）、`capture_viewport` + 视觉读图
 - ✅ **分析步扩展**：`define_step` 支持 `heat`/`coupled`（温度/耦合分析）
-- ⚠️ 上游以 SKILL 文本提供的**建模/分析流程指引**：本插件以**可直接执行的原生工具**覆盖其底层能力，但未照搬其 SKILL 指令集
-- ⚠️ `result_mesh.json` **Web 浏览器查看器**、Tosca **形状/拓扑优化**：未提供（优化需经 `run_python` 调用）
-
-**差异点**：① 不携带上游 `Skill/abaqus/*` 目录（第三方内容不随仓库分发）；② **复合材料/层合板故意采用「壳复合」（S4R + `CompositeShellSection`），而非上游 `*Solid Section, composite` 的实体叠层**——按项目要求避免 3D 实体单元；③ 源码**无机器特定/硬编码路径**（Abaqus 命令等走环境变量/配置，测试在 `os.tmpdir()`）。
 
 上游归属声明见 [`plugin/NOTICE`](plugin/NOTICE) 与 [`LICENSE`](LICENSE)。
 
