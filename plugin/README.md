@@ -42,20 +42,24 @@ DSH(agent) ──原生工具──> dsh-cae-agent(本插件, TCP) ──> Abaqu
 
 ```
 plugin/
-├── lib/
-│   ├── index.js            # Cordis 入口: name/Config/inject/apply, 聚合各域
-│   ├── core.js             # socket bridge 客户端 + runKernelCode + registerTool
+├── src/                     # TypeScript 源码（dsh-plugin-dev 规范）
+│   ├── index.ts             # Cordis 入口: name/Config(Schemastery)/inject/apply, 聚合各域
+│   ├── core.ts              # socket bridge 客户端 + runKernelCode（支持 exec.signal 取消）
 │   └── tools/
-│       ├── read.js         # 档1 只读
-│       ├── geometry.js     # part/set/instantiate
-│       ├── material.js     # create_material/assign_section
-│       ├── setup.js        # define_step/apply_load/set_bc
-│       ├── interaction.js  # create_interaction/set_friction
-│       ├── mesh.js         # generate_mesh
-│       └── job.js          # submit_job/set_workdir/run_python
+│       ├── read.ts          # 档1 只读
+│       ├── geometry.ts      # part/set/instantiate
+│       ├── material.ts      # create_material/assign_section
+│       ├── setup.ts         # define_step/apply_load/set_bc
+│       ├── interaction.ts   # create_interaction/set_friction
+│       ├── mesh.ts          # generate_mesh
+│       └── job.ts           # submit_job/set_workdir/run_python
+├── lib/                     # tsc 构建产物（Dsh 加载入口 lib/index.js，含 .d.ts）
+├── scripts/
+│   └── link-deps.ps1        # 构建期把发行包 @deepseek-ai/* junction 进 node_modules
 ├── test/
-│   ├── smoke.test.mjs      # 契约 + 20 工具注册 + 分档断言
-│   └── codegen.test.mjs    # 每个工具生成 Python 的 ast 语法校验
+│   ├── smoke.test.mjs       # 契约 + 20 工具注册 + 分档断言 + 并发安全
+│   ├── codegen.test.mjs     # 每个工具生成 Python 的 ast 语法校验
+│   └── load.test.mjs        # 真实 Cordis 运行时加载 + Schemastery 校验 + 卸载
 └── package.json / LICENSE / NOTICE / README.md
 ```
 
@@ -79,10 +83,13 @@ plugin/
 
 ```bash
 cd plugin
-npm run check                 # node --check 全部
-node test/smoke.test.mjs      # 契约 + 20 工具注册 + 分档
-node test/codegen.test.mjs    # 每个工具生成的 Python 语法校验(无需真 Abaqus)
+powershell -File scripts/link-deps.ps1     # 一次性：junction 运行时依赖(@deepseek-ai/cordis,dsh-tools,schemastery,dsh-attachment)
+npm run build                             # tsc -p tsconfig.json → lib/（含 .d.ts）
+npm test                                  # smoke + codegen + load（20 工具，真实 Cordis 加载）
+npm run typecheck                         # tsc --noEmit
 ```
+
+> 依赖说明：`@deepseek-ai/{cordis,dsh-tools,schemastery,dsh-attachment}` 是 restricted/私有包，外网不能直接 `npm i`；`scripts/link-deps.ps1` 从已安装的 DSH 发行包把它们 junction 进 `plugin/node_modules`，类型与运行时都能解析。
 
 ## 关于 Skill/ 目录（提醒）
 

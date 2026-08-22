@@ -1,28 +1,44 @@
-/**
- * tools/read.js — Tier 1 (read-only) Abaqus tools. Safe to auto-authorize:
- * these never mutate the model or submit work. All are concurrency-safe.
- */
-import { registerTool, runKernelCode, bridgeRequest } from '../core.js';
-
-export function register(ctx, config) {
-  registerTool(ctx, config, {
-    name: 'abaqus_ping',
-    description:
-      'Check whether the Abaqus/CAE socket bridge is reachable and report live session telemetry (models, viewports, Abaqus version).',
-    params: { timeoutMs: { type: 'number', description: 'Optional per-call timeout in ms' } },
-    executeImpl: async (args, _exec, br) =>
-      bridgeRequest(br.host, br.port, 'ping', {}, args.timeoutMs ?? 10000),
-    opts: { timeoutMs: 30000, isConcurrencySafe: () => true },
-  });
-
-  registerTool(ctx, config, {
-    name: 'abaqus_get_model_info',
-    description:
-      'Read-only inventory of the current Abaqus session: models with parts, materials, sections, steps, loads, BCs, interactions, sets, surfaces, assembly instances, plus jobs and viewports.',
-    executeImpl: async (_args, _exec, br) =>
-      runKernelCode(
-        br,
-        `from abaqus import mdb, session
+import { defineTool } from '@deepseek-ai/dsh-tools';
+import { Buffer } from 'node:buffer';
+import { runKernelCode, bridgeRequest, safeStringify } from '../core.js';
+/** Default per-tool timeout in ms for the bridge handshake. */
+const PING_TIMEOUT_MS = 30_000;
+export function registerRead(ctx, config) {
+    const br = { host: config.host, port: config.port };
+    const toolTimeout = config.timeoutMs;
+    ctx.tools.register(defineTool({
+        name: 'abaqus_ping',
+        description: 'Check whether the Abaqus/CAE socket bridge is reachable and report live session telemetry (models, viewports, Abaqus version).',
+        parameters: {},
+        output: {
+            schema: { type: 'object', additionalProperties: true },
+            render: (_args, value) => [{ type: 'text', text: safeStringify(value) }],
+        },
+        async execute(_args, exec) {
+            return (await bridgeRequest(br, 'ping', {}, PING_TIMEOUT_MS, exec.signal));
+        },
+        timeoutMs: 30_000,
+        isConcurrencySafe: () => true,
+    }));
+    ctx.tools.register(defineTool({
+        name: 'abaqus_get_model_info',
+        description: 'Read-only inventory of the current Abaqus session: models with parts, materials, sections, steps, loads, BCs, interactions, sets, surfaces, assembly instances, plus jobs and viewports.',
+        parameters: {},
+        output: {
+            schema: { type: 'object', additionalProperties: true },
+            render: (_args, value) => {
+                const v = (value ?? {});
+                const summary = Object.keys(v)
+                    .map((model) => {
+                    const obj = (v[model] ?? {});
+                    return `${model}: ${Object.keys(obj).length} facets`;
+                })
+                    .join('; ');
+                return [{ type: 'text', text: summary ? `Abaqus model info:\n${summary}` : safeStringify(v) }];
+            },
+        },
+        async execute(_args, exec) {
+            const r = await runKernelCode(br, `from abaqus import mdb, session
 def _k(o):
     try: return list(o.keys())
     except Exception: return []
@@ -34,19 +50,25 @@ for mn in mdb.models.keys():
              "interactions":_k(m.interactions),"constraints":_k(m.constraints),
              "amplitudes":_k(m.amplitudes),"instances":_k(m.rootAssembly.instances),
              "sets":_k(m.rootAssembly.sets),"surfaces":_k(m.rootAssembly.surfaces)}
-result=out`,
-      ),
-    opts: { isConcurrencySafe: () => true },
-  });
-
-  registerTool(ctx, config, {
-    name: 'abaqus_list_jobs',
-    description:
-      'List all Abaqus jobs in the current session with status and properties (name, type, model, CPUs, domains, memory).',
-    executeImpl: async (_args, _exec, br) =>
-      runKernelCode(
-        br,
-        `from abaqus import mdb
+result=out`, toolTimeout, exec.signal);
+            return r.value;
+        },
+        isConcurrencySafe: () => true,
+    }));
+    ctx.tools.register(defineTool({
+        name: 'abaqus_list_jobs',
+        description: 'List all Abaqus jobs in the current session with status and properties (name, type, model, CPUs, domains, memory).',
+        parameters: {},
+        output: {
+            schema: { type: 'array', items: { type: 'object', additionalProperties: true } },
+            render: (_args, value) => {
+                const rows = Array.isArray(value) ? value : [];
+                const lines = rows.map((j) => `${String(j.name ?? '?')}: ${String(j.status ?? '')} (${String(j.type ?? '')})`);
+                return [{ type: 'text', text: lines.length ? `Abaqus jobs:\n${lines.join('\n')}` : '(no jobs)' }];
+            },
+        },
+        async execute(_args, exec) {
+            const r = await runKernelCode(br, `from abaqus import mdb
 jobs=[]
 for n in mdb.jobs.keys():
     j=mdb.jobs[n]
@@ -57,21 +79,24 @@ for n in mdb.jobs.keys():
             if v is not None: item[a]=str(v)
         except Exception: pass
     jobs.append(item)
-result=jobs`,
-      ),
-    opts: { isConcurrencySafe: () => true },
-  });
-
-  registerTool(ctx, config, {
-    name: 'abaqus_monitor_job',
-    description:
-      'Inspect job objects and, when a job name is given, tail its .sta progress and grep .msg diagnostics (ERROR/WARNING). With no job name, lists all jobs and the current working directory.',
-    params: { jobName: { type: 'string', description: 'Job name; empty lists jobs' } },
-    executeImpl: async (args, _exec, br) => {
-      const job = JSON.stringify(String(args.jobName || ''));
-      return runKernelCode(
-        br,
-        `import os, re
+result=jobs`, toolTimeout, exec.signal);
+            return r.value;
+        },
+        isConcurrencySafe: () => true,
+    }));
+    ctx.tools.register(defineTool({
+        name: 'abaqus_monitor_job',
+        description: 'Inspect job objects and, when a job name is given, tail its .sta progress and grep .msg diagnostics (ERROR/WARNING). With no job name, lists all jobs and the current working directory.',
+        parameters: {
+            jobName: { type: 'string', description: 'Job name; empty lists jobs' },
+        },
+        output: {
+            schema: { type: 'object', additionalProperties: true },
+            render: (_args, value) => [{ type: 'text', text: safeStringify(value) }],
+        },
+        async execute(args, exec) {
+            const job = JSON.stringify(String(args.jobName || ''));
+            const r = await runKernelCode(br, `import os, re
 def _tl(p,c):
     try:
         with open(p) as f: lines=f.read().splitlines()
@@ -103,22 +128,33 @@ else:
     result={"job":job,"workdir":os.getcwd(),
             "progress_tail":_tl(job+".sta",8),
             "diagnostics":_grep(job+".msg",[r"^\\*\\*\\*ERROR",r"^\\*\\*\\*WARNING"],12)}
-result`,
-      );
-    },
-    opts: { isConcurrencySafe: () => true },
-  });
-
-  registerTool(ctx, config, {
-    name: 'abaqus_inspect_odb',
-    description:
-      'Open an Abaqus ODB file read-only and return metadata: title, parts, instances, steps with frames, field outputs (with components), and history regions.',
-    params: { odbPath: { type: 'string', required: true, description: 'Absolute path to the .odb file' } },
-    executeImpl: async (args, _exec, br) => {
-      const p = JSON.stringify(String(args.odbPath));
-      return runKernelCode(
-        br,
-        `from odbAccess import openOdb
+result`, toolTimeout, exec.signal);
+            return r.value;
+        },
+        isConcurrencySafe: () => true,
+    }));
+    ctx.tools.register(defineTool({
+        name: 'abaqus_inspect_odb',
+        description: 'Open an Abaqus ODB file read-only and return metadata: title, parts, instances, steps with frames, field outputs (with components), and history regions.',
+        parameters: {
+            odbPath: { type: 'string', required: true, description: 'Absolute path to the .odb file' },
+        },
+        output: {
+            schema: { type: 'object', additionalProperties: true },
+            render: (_args, value) => {
+                const v = (value ?? {});
+                const steps = Array.isArray(v.steps) ? v.steps : [];
+                return [
+                    {
+                        type: 'text',
+                        text: `ODB ${String(v.title ?? '')} — ${steps.length} step(s), parts=${String(v.parts ?? '')}, instances=${String(v.instances ?? '')}`,
+                    },
+                ];
+            },
+        },
+        async execute(args, exec) {
+            const p = JSON.stringify(String(args.odbPath));
+            const r = await runKernelCode(br, `from odbAccess import openOdb
 odb=None
 try:
     odb=openOdb(path=${p}, readOnly=True)
@@ -156,22 +192,33 @@ try:
             "steps":steps}
 finally:
     if odb is not None: odb.close()
-result`,
-      );
-    },
-    opts: { timeoutMs: 120000, isConcurrencySafe: () => true },
-  });
-
-  registerTool(ctx, config, {
-    name: 'abaqus_capture_viewport',
-    description:
-      'Capture an Abaqus viewport as a base64 PNG image. Used to visually review the current model or results. The image is persisted as a DSH attachment when possible.',
-    params: { viewportName: { type: 'string', description: 'Viewport name; empty = current viewport' } },
-    executeImpl: async (args, _exec, br) => {
-      const v = JSON.stringify(String(args.viewportName || ''));
-      const res = await runKernelCode(
-        br,
-        `import os,tempfile,base64
+result`, 120_000, exec.signal);
+            return r.value;
+        },
+        timeoutMs: 120_000,
+        isConcurrencySafe: () => true,
+    }));
+    ctx.tools.register(defineTool({
+        name: 'abaqus_capture_viewport',
+        description: 'Capture an Abaqus viewport as a base64 PNG image. Used to visually review the current model or results. The image is persisted as a DSH attachment when possible.',
+        parameters: {
+            viewportName: { type: 'string', description: 'Viewport name; empty = current viewport' },
+        },
+        output: {
+            schema: { type: 'object', additionalProperties: true },
+            render: (_args, value) => {
+                const v = (value ?? {});
+                return [
+                    {
+                        type: 'text',
+                        text: `Captured viewport "${String(v.viewport ?? '')}" (${String(v.format ?? 'png')}, ${String(v.size_bytes ?? 0)} bytes).`,
+                    },
+                ];
+            },
+        },
+        async execute(args, exec) {
+            const v = JSON.stringify(String(args.viewportName || ''));
+            const res = await runKernelCode(br, `import os,tempfile,base64
 from abaqus import session
 import abaqusConstants as ABQ
 vp=${v}
@@ -186,21 +233,24 @@ try:
 finally:
     try: os.unlink(p)
     except Exception: pass
-result`,
-      );
-      if (res.value && res.value.image_base64 && ctx.attachments) {
-        try {
-          const { Buffer } = await import('node:buffer');
-          const b64 = res.value.image_base64;
-          if (config.captureSaveImage !== false) {
-            await ctx.attachments.saveImage({ data: Buffer.from(b64, 'base64'), mimeType: 'image/png' });
-          }
-        } catch (_e) {
-          /* best-effort */
-        }
-      }
-      return JSON.stringify(res.value ?? {});
-    },
-    opts: { timeoutMs: 60000, isConcurrencySafe: () => true },
-  });
+result`, 60_000, exec.signal);
+            const raw = (res.value ?? {});
+            const imageB64 = typeof raw.image_base64 === 'string' ? raw.image_base64 : '';
+            if (imageB64) {
+                try {
+                    await ctx.attachments.saveImage({ data: Buffer.from(imageB64, 'base64'), mediaType: 'image/png' });
+                }
+                catch {
+                    /* best-effort: attachment persistence must never break the tool result */
+                }
+            }
+            return {
+                viewport: raw.viewport ?? '',
+                format: raw.format ?? 'png',
+                size_bytes: raw.size_bytes ?? 0,
+            };
+        },
+        timeoutMs: 60_000,
+        isConcurrencySafe: () => true,
+    }));
 }

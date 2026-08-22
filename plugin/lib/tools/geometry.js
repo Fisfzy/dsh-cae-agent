@@ -1,42 +1,53 @@
-/**
- * tools/geometry.js — Tier 2 controlled modeling: part creation, set/geometry
- * selection, and assembly instantiation. Set selection supports cells/faces/
- * edges/vertices by index or by 2D/3D point coordinates (findAt). Parametr-
- * ization follows FEA workflow (create part -> sketch/extrude primitive ->
- * define sets -> instantiate into assembly).
- */
-import { registerTool, runKernelCode } from '../core.js';
-
+import { defineTool } from '@deepseek-ai/dsh-tools';
+import { runKernelCode } from '../core.js';
 const VALID_SHAPES = ['SOLID', 'SHELL', 'WIRE', 'POINT'];
 const VALID_TYPES = ['DEFORMABLE', 'DISCRETE_RIGID', 'ANALYTIC_RIGID'];
-
-export function register(ctx, config) {
-  registerTool(ctx, config, {
-    name: 'abaqus_create_part',
-    description:
-      'Create a new (deformable) part in a model. Supports a simple 3D solid primitive (box by base corner + depth, or a cylinder by radius+height) so a first geometry exists without scripting. For arbitrary sketches, use abaqus_run_python. shape: SOLID|SHELL|WIRE; type: DEFORMABLE (default).',
-    params: {
-      model: { type: 'string', required: true, description: 'Model name' },
-      name: { type: 'string', required: true, description: 'Part name' },
-      shape: { type: 'string', description: 'SOLID|SHELL|WIRE (default SOLID)' },
-      type: { type: 'string', description: 'DEFORMABLE (default)' },
-      primitive: { type: 'string', description: 'box|cylinder (default box). box -> boxX/boxY/boxZ; cylinder -> radius/height, axis' },
-      boxX: { type: 'number', description: 'Box size X'},
-      boxY: { type: 'number', description: 'Box size Y'},
-      boxZ: { type: 'number', description: 'Box size Z'},
-      radius: { type: 'number', description: 'Cylinder radius'},
-      height: { type: 'number', description: 'Cylinder height'},
-      axis: { type: 'string', description: 'Cylinder axis: X|Y|Z (default Z)'},
-    },
-    executeImpl: async (args, _exec, br) => {
-      const model = JSON.stringify(String(args.model));
-      const name = JSON.stringify(String(args.name));
-      const shape = (String(args.shape || 'SOLID')).toUpperCase();
-      const ptype = (String(args.type || 'DEFORMABLE')).toUpperCase();
-      if (!VALID_SHAPES.includes(shape)) throw new Error('shape must be SOLID|SHELL|WIRE');
-      if (!VALID_TYPES.includes(ptype)) throw new Error('type must be DEFORMABLE|DISCRETE_RIGID|ANALYTIC_RIGID');
-      const primitive = String(args.primitive || 'box');
-      const code = `from abaqusConstants import THREE_D, FOUR_NODE_TET
+const VALID_REGIONS = ['cells', 'faces', 'edges', 'vertices'];
+export function registerGeometry(ctx, config) {
+    const br = { host: config.host, port: config.port };
+    ctx.tools.register(defineTool({
+        name: 'abaqus_create_part',
+        description: 'Create a new (deformable) part in a model. Supports a simple 3D solid primitive (box by base corner + depth, or a cylinder by radius+height) so a first geometry exists without scripting. For arbitrary sketches, use abaqus_run_python. shape: SOLID|SHELL|WIRE; type: DEFORMABLE (default).',
+        parameters: {
+            model: { type: 'string', required: true, description: 'Model name' },
+            name: { type: 'string', required: true, description: 'Part name' },
+            shape: { type: 'string', enum: ['SOLID', 'SHELL', 'WIRE'], description: 'SOLID|SHELL|WIRE (default SOLID)' },
+            type: {
+                type: 'string',
+                enum: ['DEFORMABLE', 'DISCRETE_RIGID', 'ANALYTIC_RIGID'],
+                description: 'DEFORMABLE (default)',
+            },
+            primitive: { type: 'string', enum: ['box', 'cylinder'], description: 'box|cylinder (default box)' },
+            boxX: { type: 'number', description: 'Box size X' },
+            boxY: { type: 'number', description: 'Box size Y' },
+            boxZ: { type: 'number', description: 'Box size Z' },
+            radius: { type: 'number', description: 'Cylinder radius' },
+            height: { type: 'number', description: 'Cylinder height' },
+            axis: { type: 'string', description: 'Cylinder axis: X|Y|Z (default Z)' },
+        },
+        output: {
+            schema: { type: 'object', additionalProperties: true },
+            render: (_args, value) => {
+                const v = (value ?? {});
+                return [
+                    {
+                        type: 'text',
+                        text: `Part "${String(v.name ?? '')}" in model "${String(v.model ?? '')}" (cells=${String(v.cells ?? 0)}, faces=${String(v.faces ?? 0)}, edges=${String(v.edges ?? 0)})`,
+                    },
+                ];
+            },
+        },
+        async execute(args, exec) {
+            const model = JSON.stringify(String(args.model));
+            const name = JSON.stringify(String(args.name));
+            const shape = String(args.shape ?? 'SOLID').toUpperCase();
+            const ptype = String(args.type ?? 'DEFORMABLE').toUpperCase();
+            if (!VALID_SHAPES.includes(shape))
+                throw new Error('shape must be SOLID|SHELL|WIRE');
+            if (!VALID_TYPES.includes(ptype))
+                throw new Error('type must be DEFORMABLE|DISCRETE_RIGID|ANALYTIC_RIGID');
+            const primitive = String(args.primitive ?? 'box');
+            const r = await runKernelCode(br, `from abaqusConstants import THREE_D, FOUR_NODE_TET
 from abaqus import mdb
 m=mdb.models[${model}]
 name=${name}
@@ -56,32 +67,51 @@ elif prim=="cylinder":
     s=part.MainSketch(name="_profile_", objectToCopy=None)
     s.CircleByCenterPerimeter(center=(0.0,0.0), point1=(r,0.0))
     part.BaseSolidExtrude(sketch=s, depth=he)
-result={"model":${model},"name":part.name,"exists":part.name in m.parts,"cells":len(part.cells),"faces":len(part.faces),"edges":len(part.edges)}`;
-      return runKernelCode(br, code);
-    },
-  });
-
-  registerTool(ctx, config, {
-    name: 'abaqus_create_set',
-    description:
-      'Create a named set on a part (or on the assembly if part is "Assembly") selecting geometry by element type and index list, OR by 3D point coordinates (findAt). region: "cells"|"faces"|"edges"|"vertices" (case-insensitive). indices: array of 0-based indexes, or an object {points:[[x,y,z],...]}.',
-    params: {
-      model: { type: 'string', required: true, description: 'Model name' },
-      name: { type: 'string', required: true, description: 'Set name' },
-      part: { type: 'string', description: 'Part name, or "Assembly" for the root assembly' },
-      region: { type: 'string', required: true, description: 'cells|faces|edges|vertices' },
-      indices: { type: 'string', description: 'JSON array of indices, or JSON object {"points":[[x,y,z],...]}. If omitted, selects all of that type.' },
-    },
-    executeImpl: async (args, _exec, br) => {
-      const model = JSON.stringify(String(args.model));
-      const name = JSON.stringify(String(args.name));
-      const part = JSON.stringify(String(args.part || 'Assembly'));
-      const region = String(args.region || 'cells').toLowerCase();
-      const spec = args.indices ? JSON.parse(String(args.indices)) : null;
-      const code = `from abaqus import mdb
+result={"model":${model},"name":part.name,"exists":part.name in m.parts,"cells":len(part.cells),"faces":len(part.faces),"edges":len(part.edges)}`, config.timeoutMs, exec.signal);
+            return r.value;
+        },
+        timeoutMs: config.timeoutMs,
+        isConcurrencySafe: () => false,
+    }));
+    ctx.tools.register(defineTool({
+        name: 'abaqus_create_set',
+        description: 'Create a named set on a part (or on the assembly if part is "Assembly") selecting geometry by element type and index list, OR by 3D point coordinates (findAt). region: "cells"|"faces"|"edges"|"vertices". indices: array of 0-based indexes, or an object {points:[[x,y,z],...]}.',
+        parameters: {
+            model: { type: 'string', required: true, description: 'Model name' },
+            name: { type: 'string', required: true, description: 'Set name' },
+            part: { type: 'string', description: 'Part name, or "Assembly" for the root assembly' },
+            region: {
+                type: 'string',
+                required: true,
+                enum: ['cells', 'faces', 'edges', 'vertices'],
+                description: 'cells|faces|edges|vertices',
+            },
+            indices: {
+                type: 'string',
+                description: 'JSON array of indices, or JSON object {"points":[[x,y,z],...]}. If omitted, selects all of that type.',
+            },
+        },
+        output: {
+            schema: { type: 'object', additionalProperties: true },
+            render: (_args, value) => {
+                const v = (value ?? {});
+                return [
+                    { type: 'text', text: `Set "${String(v.set ?? '')}" on ${String(v.container ?? '?')}: ${String(v.count ?? 0)} ${String(v.region ?? '')}` },
+                ];
+            },
+        },
+        async execute(args, exec) {
+            const model = JSON.stringify(String(args.model));
+            const name = JSON.stringify(String(args.name));
+            const part = JSON.stringify(String(args.part || 'Assembly'));
+            const region = String(args.region || 'cells').toLowerCase();
+            if (!VALID_REGIONS.includes(region))
+                throw new Error('region must be cells|faces|edges|vertices');
+            const spec = args.indices ? JSON.parse(String(args.indices)) : null;
+            const r = await runKernelCode(br, `from abaqus import mdb
 m=mdb.models[${model}]
 name=${name}
-target = m.rootAssembly if ${JSON.stringify(String(args.part||'Assembly'))}.lower()=="assembly" else m.parts[${part}]
+target = m.rootAssembly if ${JSON.stringify(String(args.part || 'Assembly'))}.lower()=="assembly" else m.parts[${part}]
 region=${JSON.stringify(region)}
 spec=${JSON.stringify(spec)}
 # choose the geometric collection
@@ -103,25 +133,34 @@ if region=="cells": target.Set(name=name, cells=sel)
 elif region=="faces": target.Set(name=name, faces=sel)
 elif region=="edges": target.Set(name=name, edges=sel)
 else: target.Set(name=name, vertices=sel)
-result={"set":name,"container":("assembly" if target is m.rootAssembly else "part"),"region":region,"count":len(sel)}`;
-      return runKernelCode(br, code);
-    },
-  });
-
-  registerTool(ctx, config, {
-    name: 'abaqus_instantiate',
-    description:
-      'Instantiate a part into the root assembly of a model under an instance name (defaults to a deterministic name). If only one part exists, it is instantiated automatically.',
-    params: {
-      model: { type: 'string', required: true, description: 'Model name' },
-      part: { type: 'string', description: 'Part name (default: instantiate the first part)' },
-      instanceName: { type: 'string', description: 'Instance name' },
-    },
-    executeImpl: async (args, _exec, br) => {
-      const model = JSON.stringify(String(args.model));
-      const part = args.part ? JSON.stringify(String(args.part)) : null;
-      const inst = JSON.stringify(String(args.instanceName || ''));
-      const code = `from abaqusConstants import ON
+result={"set":name,"container":("assembly" if target is m.rootAssembly else "part"),"region":region,"count":len(sel)}`, config.timeoutMs, exec.signal);
+            return r.value;
+        },
+        timeoutMs: config.timeoutMs,
+        isConcurrencySafe: () => false,
+    }));
+    ctx.tools.register(defineTool({
+        name: 'abaqus_instantiate',
+        description: 'Instantiate a part into the root assembly of a model under an instance name (defaults to a deterministic name). If only one part exists, it is instantiated automatically.',
+        parameters: {
+            model: { type: 'string', required: true, description: 'Model name' },
+            part: { type: 'string', description: 'Part name (default: instantiate the first part)' },
+            instanceName: { type: 'string', description: 'Instance name' },
+        },
+        output: {
+            schema: { type: 'object', additionalProperties: true },
+            render: (_args, value) => {
+                const v = (value ?? {});
+                return [
+                    { type: 'text', text: `Instance "${String(v.instance ?? '')}" of part "${String(v.part ?? '')}"${v.created ? '' : ' (already present)'}` },
+                ];
+            },
+        },
+        async execute(args, exec) {
+            const model = JSON.stringify(String(args.model));
+            const part = args.part ? JSON.stringify(String(args.part)) : 'null';
+            const inst = JSON.stringify(String(args.instanceName || ''));
+            const r = await runKernelCode(br, `from abaqusConstants import ON
 from abaqus import mdb
 m=mdb.models[${model}]
 part=${part}
@@ -142,8 +181,10 @@ else:
     a=m.rootAssembly
     a.Instance(name=name, part=p, dependent=ON)
     result={"instance":name,"part":part,"created":True}
-result`;
-      return runKernelCode(br, code);
-    },
-  });
+result`, config.timeoutMs, exec.signal);
+            return r.value;
+        },
+        timeoutMs: config.timeoutMs,
+        isConcurrencySafe: () => false,
+    }));
 }

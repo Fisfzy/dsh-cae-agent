@@ -1,0 +1,46 @@
+/**
+ * dsh-cae-agent — DSH (DeepSeek Harness) Cordis plugin for Abaqus/CAE.
+ *
+ * Cordis plugin contract:
+ *   export const name
+ *   export interface Config + export const Config (Schemastery schema)
+ *   export const inject = ['tools', 'attachments']
+ *   export function apply(ctx, config)
+ *
+ * Written in TypeScript per the dsh-plugin-dev standard: every tool is
+ * registered through ctx.tools.register(defineTool({ ... })), returns a
+ * canonical JSON value, and renders human-facing text via output.render.
+ *
+ * Tool authorization tiers:
+ *   Tier 1 (read-only, concurrency-safe): ping / get_model_info / list_jobs /
+ *     monitor_job / inspect_odb / capture_viewport
+ *   Tier 2 (controlled write, schema-guarded): create_part / create_set /
+ *     instantiate / create_material / assign_section / define_step /
+ *     apply_load / set_bc / generate_mesh / create_interaction / set_friction /
+ *     submit_job / set_workdir
+ *   Tier 3 (arbitrary code fallback): run_python
+ *
+ * License: MIT. Based on the socket-bridge architecture of CAE-Agent-Hub
+ * (Copyright 2026 Thompson Labs) and Abaqus-Control-MCP (MIT, 2026 Abaqus
+ * Control MCP Contributors). See NOTICE and LICENSE.
+ */
+import type { Context } from '@deepseek-ai/cordis';
+import Schema from '@deepseek-ai/schemastery';
+export declare const name = "dsh-cae-agent";
+/** Runtime dependencies this plugin requires before it can load. `attachments`
+ * is needed by `capture_viewport` (image persistence); `tools` is the registry
+ * every tool is registered on. Both are required, so both belong in inject. */
+export declare const inject: string[];
+/** Plugin configuration (validated by Schemastery on load). */
+export interface Config {
+    /** Abaqus bridge host. */
+    host: string;
+    /** Abaqus bridge port. */
+    port: number;
+    /** Default per-call timeout in ms. */
+    timeoutMs: number;
+}
+/** Schemastery schema for {@link Config}; defaults live in the schema. */
+export declare const Config: Schema<Config>;
+/** Register every tool domain on the provided context + config. */
+export declare function apply(ctx: Context, config: Config): void;

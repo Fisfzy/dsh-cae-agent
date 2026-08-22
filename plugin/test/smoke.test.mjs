@@ -56,10 +56,25 @@ for (const d of registered) {
 }
 
 // --- tier-1 read tools are concurrency-safe ---
+// defineTool's isConcurrencySafe classifier runs after args validation, so we
+// pass valid representative args (invalid args fail closed to exclusive).
+const T1_VALID_ARGS = {
+  abaqus_ping: {},
+  abaqus_get_model_info: {},
+  abaqus_list_jobs: {},
+  abaqus_monitor_job: { jobName: '' },
+  abaqus_inspect_odb: { odbPath: 'C:/tmp/x.odb' },
+  abaqus_capture_viewport: { viewportName: '' },
+};
 for (const n of EXPECTED_T1) {
   const t = registered.find((d) => d.name === n);
-  assert.ok(t.isConcurrencySafe && t.isConcurrencySafe({}) === true, `${n} should be concurrency-safe`);
+  const args = T1_VALID_ARGS[n] ?? {};
+  assert.ok(t.isConcurrencySafe, `${n} should declare isConcurrencySafe`);
+  assert.strictEqual(t.isConcurrencySafe(args), true, `${n} should be concurrency-safe with valid args`);
 }
+// tools with a required parameter must fail closed on invalid (missing) args
+const inspectOdb = registered.find((d) => d.name === 'abaqus_inspect_odb');
+assert.strictEqual(inspectOdb.isConcurrencySafe({}), false, 'abaqus_inspect_odb should fail closed on invalid args');
 
 // --- tier-2 write tools are NOT concurrency-safe (exclusive) ---
 for (const n of EXPECTED_T2) {

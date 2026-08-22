@@ -64,6 +64,35 @@ node test/codegen.test.mjs   # 每个工具生成 Python 语法校验
 
 若插件加载失败，把 `~/.dsh/cordis.patch.yml` 里的 `dsh-cae-agent` 块注释掉并重启 DSH 即可卸载；如需恢复 MCP 桥，可参照插件块的格式重新加回 `@deepseek-ai/dsh-mcp-client` 配置。
 
+## 2026-08-22 重构：JS → TypeScript（dsh-plugin-dev 规范）
+
+纯 JS（`plugin/lib/*.js`）版已按 `dsh-plugin-dev` 技能标准整体重写为 TypeScript（`plugin/src/*.ts`），构建产物仍输出到 `plugin/lib/`（`file://` 指向不变）。
+
+### 变更点
+
+- **源码形态**：`plugin/src/`（`core.ts` + `tools/{read,material,geometry,setup,interaction,mesh,job}.ts` + `index.ts`），`main`/`exports` 指向 `lib/index.js`。
+- **`inject`**：`['tools', 'attachments']`（两者均为必需依赖；`attachments` 供 `capture_viewport` 持久化截图）。
+- **`Config`**：改用 Schemastery 的 `export interface Config` + `export const Config: Schema<Config>`（默认值写进 schema），而非普通对象。
+- **工具注册**：全部改用 `ctx.tools.register(defineTool({...}))`；`parameters` 用 DSL 声明、`output.schema`/`output.render` 分离（execute 返回规范 JSON 值，render 负责人类可读文本）。
+- **并发安全**：Tier-1 只读工具 `isConcurrencySafe: () => true`；Tier-2/3 写工具未声明 → fail-closed 独占。
+- **取消**：`execute(args, exec)` 将 `exec.signal` 传入 bridge 客户端（TCP 请求可中止）。
+- **`capture_viewport` 依赖**：`ctx.attachments.saveImage({ data, mediaType:'image/png' })`（dsh-attachment 服务，经 `@deepseek-ai/dsh-attachment` 类型增强）。
+- **构建**：`tsc -p tsconfig.json`（NodeNext → `lib/`）；`scripts/link-deps.ps1` 把发行包的 `@deepseek-ai/{cordis,dsh-tools,schemastery,dsh-attachment}` 与 `@types/node` junction 进 `plugin/node_modules`（私有 restricted 包，外网不可装）。
+
+### 构建与测试
+
+```bash
+cd plugin
+powershell -File scripts/link-deps.ps1   # 一次性：junction 运行时依赖
+npm install --no-save typescript@^5.6.3   # 编译器（或先 npm i -D typescript）
+npm run build                             # tsc -> lib
+npm test                                  # smoke + codegen（20 工具，Python 语法校验）
+```
+
+### DSH 接入
+
+`~/.dsh/cordis.patch.yml` 中 `dsh-cae-agent` 仍指向 `file:///D:/AIWORK/dsh-cae-agent/plugin/lib/index.js`（TS 构建产物），无需改动；重启 DSH 后 `window.__DSH_BOOT__.entries` 应出现 `dsh-cae-agent`。
+
 ## License
 
 MIT。详见 `plugin/LICENSE` 与 `plugin/NOTICE`。
