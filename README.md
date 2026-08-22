@@ -65,17 +65,19 @@ npm run e2e                              # 真机回归：连 48152 桥跑 19 �
 
 - **e2e（`test/e2e.mjs`）**：连正在运行的 Abaqus/CAE bridge，用插件协议驱动真实工具（只读 + create_part/create_set/instantiate/create_material/assign_section/define_step/apply_load/set_bc/generate_mesh/set_workdir/run_python/set_friction + 非阻塞 submit_job/monitor_job）。已用它在真机上抓并修复过一批模板缺陷。
 
-## 历史 / 迁移说明
+## 历史 / 溯源与能力覆盖
 
-本仓库是 [CAE-Agent-Hub](https://github.com/Cai-aa/CAE-Agent-Hub)（MIT，Copyright 2026 Thompson Labs）的 **fork 与改写**。它保留了 Abaqus/CAE socket bridge 架构（基于 MIT 许可的 [Abaqus-Control-MCP](https://github.com/Whfkl/Abaqus-Control-MCP)），但：
+本项目**参考并借鉴**了 [CAE-Agent-Hub](https://github.com/Cai-aa/CAE-Agent-Hub)（MIT，Copyright 2026 Thompson Labs）与 [Abaqus-Control-MCP](https://github.com/Whfkl/Abaqus-Control-MCP)（MIT）的 **socket-bridge 架构**和 **Abaqus 建模方法论**，在此基础上**独立重写并扩展**为 DSH 原生 Cordis 插件，并非对上游的一比一复刻或完整实现。
 
-- 重写为 **DSH 原生 Cordis 插件**（不走 MCP），并按规范改为 **TypeScript 源码**（`src/*.ts` → `lib/`）；
-- **21 个工具、三档授权 + 运维工具** 取代原先单个 `run_python` 收口；
-- 新增 `abaqus_launch_cae`（拉启 Abaqus + 自动开桥）、`abaqus_submit_job` 异步化；
-- 新增真机 `e2e` 回归，修复了一大批模板缺陷（几何/壳/独立实例/厚度常量/null 注入/材料/网格/friction）。
-- **移除了上游 `Skill/abaqus/*` 目录**（第三方受限许可内容不随本仓库分发）。
+**工具能力覆盖（对照上游 Abaqus 能力）：**
+- ✅ Abaqus 实时会话操作：`run_python` / 模型与作业查询 / `submit_job` / `monitor_job` / `inspect_odb` / `capture_viewport` / `set_workdir`（覆盖其 MCP 工具面，并**新增完整建模写链**：部件/集合/装配/材料/截面/步/荷载/边界/网格/接触/摩擦，及运维工具 `abaqus_launch_cae`）
+- ⚠️ 上游以 SKILL 文本提供的**建模/分析流程指引**（几何/材料/网格/step/load/bc/static/modal/dynamic/thermal/contact 等）：本插件以**可直接执行的原生工具**覆盖其底层能力，但未照搬其 SKILL 指令集
+- ⚠️ `result_mesh.json` **Web 浏览器查看器**：本插件未提供（用户判断该功能价值不大）
+- ⚠️ Tosca **形状/拓扑优化**：未专设工具，需通过 `abaqus_run_python` 手动调用
 
-详细迁移与修复记录见 [`docs/MIGRATION.md`](docs/MIGRATION.md)。
+**差异点**：不携带上游 `Skill/abaqus/*` 指令目录（第三方内容不随仓库分发）；部分能力强于上游（完整原生写链、一次性拉启 Abaqus）。
+
+上游归属声明见 [`plugin/NOTICE`](plugin/NOTICE) 与 [`LICENSE`](LICENSE)。
 
 ## License
 

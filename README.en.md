@@ -65,17 +65,19 @@ npm run e2e                              # live regression: 19 checks against th
 
 - **e2e (`test/e2e.mjs`)** connects to a running Abaqus/CAE bridge and drives the real tools (read-only + create_part/create_set/instantiate/create_material/assign_section/define_step/apply_load/set_bc/generate_mesh/set_workdir/run_python/set_friction + non-blocking submit_job/monitor_job). It has already surfaced and fixed a number of template defects live.
 
-## History / migration note
+## History / provenance & coverage
 
-This repository is a **fork and rewrite** of [CAE-Agent-Hub](https://github.com/Cai-aa/CAE-Agent-Hub) (MIT, Copyright 2026 Thompson Labs). It keeps the Abaqus/CAE socket-bridge architecture (based on the MIT-licensed [Abaqus-Control-MCP](https://github.com/Whfkl/Abaqus-Control-MCP)) but:
+This project **references and adapts** the **socket-bridge architecture** and **Abaqus modeling methodology** of [CAE-Agent-Hub](https://github.com/Cai-aa/CAE-Agent-Hub) (MIT, Copyright 2026 Thompson Labs) and [Abaqus-Control-MCP](https://github.com/Whfkl/Abaqus-Control-MCP) (MIT), then **independently rewrites and extends** them into a native DSH Cordis plugin. It is not a 1:1 reimplementation of the upstream project.
 
-- reworks the integration into a **native DSH Cordis plugin** (no MCP hop), with source rewritten as **TypeScript** (`src/*.ts` → `lib/`);
-- exposes a **21-tool, three-tier + ops native toolset** instead of a single `run_python` funnel;
-- adds `abaqus_launch_cae` (launch Abaqus + auto-open bridge) and async `abaqus_submit_job`;
-- adds a live `e2e` regression and fixes a batch of template defects (geometry/shell/independent-instance/thickness-constants/null-injection/material/mesh/friction).
-- **drops the upstream `Skill/abaqus/*` directory** (third-party `restricted`-licensed content is not redistributed).
+**Tool coverage vs. upstream Abaqus capability:**
+- ✅ Live Abaqus session ops: `run_python` / model & job queries / `submit_job` / `monitor_job` / `inspect_odb` / `capture_viewport` / `set_workdir` (covers its MCP tool surface, **plus a complete modeling-write chain**: part/set/assembly/material/section/step/load/BC/mesh/contact/friction, and an ops tool `abaqus_launch_cae`)
+- ⚠️ Upstream workflow-**guidance SKILLs** (geometry/material/mesh/step/load/bc/static/modal/dynamic/thermal/contact, etc.): this plugin covers the underlying capability with directly-executable native tools, but does not ship the upstream SKILL instruction set
+- ⚠️ `result_mesh.json` **browser viewer**: not provided (judged low-value)
+- ⚠️ Tosca **shape/topology optimization**: no dedicated tool; use `abaqus_run_python` manually
 
-See [`docs/MIGRATION.md`](docs/MIGRATION.md) for the detailed migration and fix log.
+**Differences:** the upstream `Skill/abaqus/*` instruction tree is not carried along (third-party content not redistributed); several capabilities go further than upstream (full native modeling-write chain, one-command Abaqus launch).
+
+Upstream attribution is preserved in [`plugin/NOTICE`](plugin/NOTICE) and [`LICENSE`](LICENSE).
 
 ## License
 
