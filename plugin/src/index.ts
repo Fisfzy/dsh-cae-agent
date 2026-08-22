@@ -25,6 +25,9 @@
  * Control MCP Contributors). See NOTICE and LICENSE.
  */
 import type { Context } from '@deepseek-ai/cordis'
+import os from 'node:os'
+import path from 'node:path'
+import fs from 'node:fs'
 import Schema from '@deepseek-ai/schemastery'
 import { registerRead } from './tools/read.js'
 import { registerMaterial } from './tools/material.js'
@@ -60,14 +63,48 @@ export interface Config {
   launchTimeoutMs: number
 }
 
+/** Resolve the Abaqus launcher command without machine-specific hardcoding:
+ * try a few common install locations + PATH; last resort is bare `abaqus`. */
+function defaultAbaqusCommand(): string {
+  const candidates = [
+    process.env.ABAQUS_COMMAND,
+    'D:/SIMULIA/Commands/abaqus.bat',
+    'C:/SIMULIA/Commands/abaqus.bat',
+    'abaqus',
+  ].filter(Boolean) as string[]
+  for (const c of candidates) {
+    if (c === 'abaqus') return c
+    try { if (fs.existsSync(c)) return c } catch { /* keep looking */ }
+  }
+  return 'abaqus'
+}
+
+/** Resolve the Abaqus MCP bridge plugin under the current user's home. */
+function defaultBridgePluginPath(): string {
+  const home = os.homedir()
+  const candidates = [
+    process.env.ABAQUS_MCP_HOME,
+    path.join(home, '.abaqus-mcp', 'abaqus_mcp_plugin.py'),
+  ].filter(Boolean) as string[]
+  for (const c of candidates) {
+    try { if (fs.existsSync(c)) return c } catch { /* keep looking */ }
+  }
+  return path.join(home, '.abaqus-mcp', 'abaqus_mcp_plugin.py')
+}
+
+/** Default workspace: a per-user temp/abaqus-cae dir (portable, no hardcoded path). */
+function defaultWorkspaceDir(): string {
+  return path.join(os.tmpdir(), 'abaqus-cae')
+}
+
 /** Schemastery schema for {@link Config}; defaults live in the schema. */
 export const Config: Schema<Config> = Schema.object({
   host: Schema.string().default('127.0.0.1'),
   port: Schema.number().default(48152),
   timeoutMs: Schema.number().default(120_000),
-  abaqusCommand: Schema.string().default('D:/SIMULIA/Commands/abaqus.bat'),
-  bridgePluginPath: Schema.string().default('C:/Users/Fisfzy/.abaqus-mcp/abaqus_mcp_plugin.py'),
-  workspaceDir: Schema.string().default('C:/Users/Fisfzy/.dsh/abaqus-cae'),
+  abaqusCommand: Schema.string().default(defaultAbaqusCommand()),
+  bridgePluginPath: Schema.string().default(defaultBridgePluginPath()),
+  workspaceDir: Schema.string().default(defaultWorkspaceDir()),
   launchTimeoutMs: Schema.number().default(180_000),
 })
 

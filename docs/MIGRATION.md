@@ -91,7 +91,7 @@ npm test                                  # smoke + codegen（20 工具，Python
 
 ### DSH 接入
 
-`~/.dsh/cordis.patch.yml` 中 `dsh-cae-agent` 仍指向 `file:///D:/AIWORK/dsh-cae-agent/plugin/lib/index.js`（TS 构建产物），无需改动；重启 DSH 后 `window.__DSH_BOOT__.entries` 应出现 `dsh-cae-agent`。
+`~/.dsh/cordis.patch.yml` 中 `dsh-cae-agent` 仍指向 `file://<repo>/plugin/lib/index.js`（`<repo>` 为本仓库绝对路径；TS 构建产物在 `plugin/lib/`），重启 DSH 后 `window.__DSH_BOOT__.entries` 应出现 `dsh-cae-agent`。
 
 ### 新增运维工具 `abaqus_launch_cae`（第 21 个工具）
 

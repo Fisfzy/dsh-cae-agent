@@ -30,3 +30,15 @@ abaqus.rpy*
 # --- Worktrees / editor ---
 .worktrees/
 .DS_Store
+
+# --- Local / private working notes (never commit) ---
+HANDOFF-*.md
+.handoff/
+/scratches/
+*.local.md
+
+# --- Machine-specific config / credentials — never commit ---
+*.secret
+.env
+.env.local
+.credentials*

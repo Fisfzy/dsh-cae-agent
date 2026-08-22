@@ -75,16 +75,18 @@ plugin/
 ```yaml
 - insert:
     - id: dsh-cae-agent
-      name: "file:///D:/AIWORK/dsh-cae-agent/plugin/lib/index.js"
+      name: "file://<repo>/plugin/lib/index.js"        # <repo> = 本仓库绝对路径
       config:
         host: "127.0.0.1"
         port: 48152
         timeoutMs: 120000
-        abaqusCommand: "D:/SIMULIA/Commands/abaqus.bat"      # abaqus_launch_cae 调起用
-        bridgePluginPath: "C:/Users/Fisfzy/.abaqus-mcp/abaqus_mcp_plugin.py"  # CAE 内的 socket bridge 插件
-        workspaceDir: "C:/Users/Fisfzy/.dsh/abaqus-cae"      # launch_cae 的工作目录+startup 文件
-        launchTimeoutMs: 180000                               # launch_cae 等桥就绪的超时
+        # 以下各项都可省略——均有可移植默认（见 src/index.ts），按需覆盖即可：
+        # abaqusCommand: "…/abaqus.bat"                # Abaqus 启动命令
+        # bridgePluginPath: "~/.abaqus-mcp/abaqus_mcp_plugin.py"  # CAE 内 socket bridge 插件
+        # workspaceDir: "~/.abaqus-cae"                # launch_cae 工作目录
+        # launchTimeoutMs: 180000                      # 等桥就绪超时
 ```
+> 示例中 `<repo>` 与 `~` 需替换为你本机的实际绝对路径；**不要**把含本机用户名的路径提交进仓库。
 
 前提（二选一）：
 - **手动**：Abaqus/CAE 已开启 → `Plug-ins > Abaqus MCP > Start Socket Bridge`；

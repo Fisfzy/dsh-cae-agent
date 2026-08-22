@@ -4,6 +4,7 @@
 // and checks each against its success criterion. Write-tool scenarios run in a
 // fresh test model so the user's working model is not polluted.
 import net from 'node:net'
+import os from 'node:os'
 import { Config, apply } from '../lib/index.js'
 
 const HOST = '127.0.0.1'
@@ -132,8 +133,8 @@ result="ok"`)
 
   // --- set_workdir: change Abaqus cwd to a clean dir (does not alter the model) ---
   const prevCwd = (await bridgeRequest('execute', { code: 'import os; result=os.getcwd()' }))?.result?.return_value
-  const wk = await runTool('abaqus_set_workdir', { path: 'D:/temp' })
-  check('abaqus_set_workdir ok', !!wk && (wk.current === 'D:/temp' || wk.current === 'D:\\temp'), `current=${wk?.current}`)
+  const wk = await runTool('abaqus_set_workdir', { path: os.tmpdir() })
+  check('abaqus_set_workdir ok', !!wk && (wk.current === os.tmpdir() || wk.current === os.tmpdir().replace(/\\/g, '/')), `current=${wk?.current}`)
 
   // --- run_python: arbitrary kernel python through the plugin fallback ---
   const rp = await runTool('abaqus_run_python', { code: 'from abaqus import mdb\nresult=len(mdb.models.keys())' })
