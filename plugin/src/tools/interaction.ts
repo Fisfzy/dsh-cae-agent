@@ -114,13 +114,13 @@ result={"interaction":name,"step":stepname,"kind":kind,"master":${m.inst}+":"+${
         const r = await runKernelCode(
           br,
           `from abaqus import mdb
+from abaqusConstants import PENALTY, ISOTROPIC, OFF, FRACTION, HARD, ON, FRICTIONLESS
 m=mdb.models[${model}]
 name=${name}
 if name in m.interactionProperties: del m.interactionProperties[name]
 ip=m.ContactProperty(name)
-ip.TangentialBehavior(formulation=PENALTY, directionality=ISOTROPIC, slipRateDependence=OFF, pressureDependence=OFF, temperatureDependence=OFF, dependencies=0, table=(( ${friction}, ),), shearStressLimit=None, maximumElasticSlip=FRACTION)
+ip.TangentialBehavior(formulation=PENALTY, directionality=ISOTROPIC, slipRateDependency=OFF, pressureDependency=OFF, temperatureDependency=OFF, dependencies=0, table=(( ${friction}, ),), shearStressLimit=None, maximumElasticSlip=FRACTION, fraction=0.005)
 if ${friction} <= 0.0:
-    from abaqusConstants import FRICTIONLESS
     ip.NormalBehavior(pressureOverclosure=HARD, allowSeparation=ON)
 result={"property":name,"friction":${friction}}`,
           config.timeoutMs,

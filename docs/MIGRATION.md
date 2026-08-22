@@ -116,7 +116,13 @@ npm test                                  # smoke + codegen（20 工具，Python
 - **`assign_section`**：默认按几何自适应 solid/shell；shell 厚度 `SPECIFY_THICKNESS` → `UNIFORM`；`reg.name`（Set 无该属性）→ 返回集合名字符串。
 - **`generate_mesh`**：`from part import ElemType` 在当前内核不可导入（去掉显式 setElementType，用默认网格器）；独立实例模型自动改到装配实例上 `seedPartInstance`+`generateMesh`。
 
-e2e 现覆盖 13 项（只读 + create_part/create_set/instantiate/create_material/assign_section/define_step/apply_load/set_bc/generate_mesh + 复核），全绿。作为后续改动的回归兜底。
+e2e 现覆盖 19 项（只读 + create_part/create_set/instantiate/create_material/assign_section/define_step/apply_load/set_bc/generate_mesh/set_workdir/run_python/set_friction + 非阻塞 submit_job/桥响应/monitor_job + 复核），全绿。作为后续改动的回归兜底。
+
+### 后续一轮（本轮）修复
+
+- **`submit_job` 改异步**：去掉 `waitForCompletion()`（它会阻塞桥的 GUI 派遣器，导致求解期间插件整体不可用/其它工具超时）。改为 `submit()` 后立即返回 `mode=submitted`，用 `monitor_job` 轮询 `.sta/.lck`。实测提交返回约 2.7s、桥保持响应。**这是把"求解会让插件瘫痪"这个实测缺陷修掉的关键。**
+- **`set_friction`**：补 `abaqusConstants` 引入（`PENALTY/ISOTROPIC/OFF/FRACTION/HARD/ON/FRICTIONLESS`）；kwarg 名 `pressureDependence`→`pressureDependency`（`slipRateDependency`/`temperatureDependency` 同）；`maximumElasticSlip=FRACTION` 需配套 `fraction=0.005`（否则报"弹性滑动容差分数必须大于零"）。
+- **e2e 扩到 19 项**：新增 set_workdir / run_python / set_friction / submit_job(非阻塞) / bridge响应 / monitor_job。
 
 ## License
 

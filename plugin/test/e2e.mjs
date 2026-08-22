@@ -130,6 +130,41 @@ result="ok"`)
   const mesh = await runTool('abaqus_generate_mesh', { model: TEST_MODEL, part: PART, elementFamily: 'solid', size: 0.5 })
   check('abaqus_generate_mesh (solid) ok', !!mesh && (mesh.elements || 0) > 0, `elements=${mesh?.elements} nodes=${mesh?.nodes} target=${mesh?.target}`)
 
+  // --- set_workdir: change Abaqus cwd to a clean dir (does not alter the model) ---
+  const prevCwd = (await bridgeRequest('execute', { code: 'import os; result=os.getcwd()' }))?.result?.return_value
+  const wk = await runTool('abaqus_set_workdir', { path: 'D:/temp' })
+  check('abaqus_set_workdir ok', !!wk && (wk.current === 'D:/temp' || wk.current === 'D:\\temp'), `current=${wk?.current}`)
+
+  // --- run_python: arbitrary kernel python through the plugin fallback ---
+  const rp = await runTool('abaqus_run_python', { code: 'from abaqus import mdb\nresult=len(mdb.models.keys())' })
+  check('abaqus_run_python ok', rp !== undefined && rp !== null, `value=${JSON.stringify(rp)}`)
+
+  // --- set_friction: create an interaction property (contact half) ---
+  const fr = await runTool('abaqus_set_friction', { model: TEST_MODEL, name: 'E2E_fric', friction: 0.4 })
+  check('abaqus_set_friction ok', !!fr && !!fr.property, `property=${fr?.property} friction=${fr?.friction}`)
+
+  // --- submit_job: non-blocking. Create a tiny job then submit; the tool must
+  //     return promptly (mode=submitted) AND the bridge must still answer ---- 
+  await kernel(`from abaqus import mdb
+if "JobE2E" in mdb.jobs: del mdb.jobs["JobE2E"]
+mdb.Job(name="JobE2E", model=${JSON.stringify(TEST_MODEL)})
+result="ok"`)
+  const t0 = Date.now()
+  let sub
+  try { sub = await runTool('abaqus_submit_job', { jobName: 'JobE2E' }) } catch (e) { sub = { submitErr: String(e?.message) } }
+  const submitMs = Date.now() - t0
+  check('abaqus_submit_job non-blocking', !!sub && sub.mode === 'submitted', `mode=${sub?.mode ?? sub?.submitErr} returnedIn=${submitMs}ms`)
+  // prove the bridge is NOT blocked after submit: a quick ping must answer
+  const post = await bridgeRequest('ping', {}, 8000)
+  check('bridge responsive after submit (non-blocking)', post?.ok === true || !!post?.result, 'bridge still answers')
+
+  // --- monitor_job: should list the job / report status (read .sta via kernel) ---
+  const mon = await runTool('abaqus_monitor_job', { jobName: '' })
+  check('abaqus_monitor_job returns jobs array', !!mon && Array.isArray(mon.jobs), `jobs=${(mon?.jobs || []).map((j) => j.name).join(',')}`)
+
+  // restore cwd
+  if (prevCwd) { try { await runTool('abaqus_set_workdir', { path: prevCwd }) } catch { /* ignore */ } }
+
   // --- get_model_info should now include the test model's objects ---
   const after = await runTool('abaqus_get_model_info', {})
   const tmi = after?.[TEST_MODEL]
@@ -139,9 +174,10 @@ result="ok"`)
 } catch (e) {
   check('unexpected e2e error', false, String(e?.message || e))
 } finally {
-  // cleanup the test model
+  // cleanup the test model (removes its job too)
   try { await kernel(`from abaqus import mdb
 if ${JSON.stringify(TEST_MODEL)} in mdb.models: del mdb.models[${JSON.stringify(TEST_MODEL)}]
+if "JobE2E" in mdb.jobs: del mdb.jobs["JobE2E"]
 result="cleaned"`) } catch { /* ignore */ }
 }
 

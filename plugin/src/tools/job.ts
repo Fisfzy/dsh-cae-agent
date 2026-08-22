@@ -54,7 +54,7 @@ result`,
     defineTool({
       name: 'abaqus_submit_job',
       description:
-        'Submit an existing Abaqus job by name and wait for completion. The job must already be defined in the session (e.g. mdb.Job). Returns the final job status.',
+        'Submit an existing Abaqus job by name (non-blocking). The job must already be defined in the session (e.g. mdb.Job). Returns immediately with the submitted state; poll progress with abaqus_monitor_job or inspect Job-*.sta / Job-*.lck until completion. This avoids blocking the Abaqus bridge on the GUI thread.',
       parameters: {
         jobName: { type: 'string', required: true, description: 'Job name defined in the current session' },
       },
@@ -62,7 +62,9 @@ result`,
         schema: { type: 'object', additionalProperties: true },
         render: (_args, value) => {
           const v = (value ?? {}) as JsonRecord
-          return [{ type: 'text', text: `Job "${String(v.job ?? '')}" finished: ${String(v.status ?? 'UNKNOWN')}` }]
+          return [
+            { type: 'text', text: `Job "${String(v.job ?? '')}" submitted (mode=${String(v.mode ?? '')}, status=${String(v.status ?? '')}). Use abaqus_monitor_job to track progress.` },
+          ]
         },
       },
       async execute(args, exec) {
@@ -74,15 +76,14 @@ jn=${jn}
 if jn not in mdb.jobs: raise KeyError("Job not found: "+jn)
 j=mdb.jobs[jn]
 j.submit(consistencyChecking=False)
-j.waitForCompletion()
-result={"success":True,"job":jn,"status":str(getattr(j,"status","UNKNOWN"))}
+result={"success":True,"mode":"submitted","job":jn,"status":str(getattr(j,"status","SUBMITTED"))}
 result`,
-          3_600_000,
+          30_000,
           exec.signal,
         )
         return r.value as JsonRecord
       },
-      timeoutMs: 3_600_000,
+      timeoutMs: 30_000,
       isConcurrencySafe: () => false,
     }),
   )
