@@ -39,6 +39,14 @@ export interface Config {
     port: number;
     /** Default per-call timeout in ms. */
     timeoutMs: number;
+    /** Abaqus launcher command (path to abaqus.bat / abaqus executable). */
+    abaqusCommand: string;
+    /** Abaqus MCP socket-bridge plugin file loaded inside CAE. */
+    bridgePluginPath: string;
+    /** Working directory where Abaqus/CAE is launched (and its startup file lives). */
+    workspaceDir: string;
+    /** How long `abaqus_launch_cae` waits for the bridge to come up, in ms. */
+    launchTimeoutMs: number;
 }
 /** Schemastery schema for {@link Config}; defaults live in the schema. */
 export declare const Config: Schema<Config>;

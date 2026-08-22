@@ -36,7 +36,8 @@ const EXPECTED_T2 = [
   'abaqus_submit_job', 'abaqus_set_workdir',
 ];
 const EXPECTED_T3 = ['abaqus_run_python'];
-const EXPECTED = [...EXPECTED_T1, ...EXPECTED_T2, ...EXPECTED_T3];
+const EXPECTED_OPS = ['abaqus_launch_cae'];
+const EXPECTED = [...EXPECTED_T1, ...EXPECTED_T2, ...EXPECTED_T3, ...EXPECTED_OPS];
 
 for (const n of EXPECTED) {
   assert.ok(names.has(n), `expected tool "${n}" to be registered`);
@@ -81,8 +82,15 @@ for (const n of EXPECTED_T2) {
   const t = registered.find((d) => d.name === n);
   assert.ok(!t.isConcurrencySafe || t.isConcurrencySafe({}) !== true, `${n} should be exclusive (not concurrency-safe)`);
 }
+// --- ops launch tool is exclusive too ---
+for (const n of EXPECTED_OPS) {
+  const t = registered.find((d) => d.name === n);
+  assert.ok(!t.isConcurrencySafe || t.isConcurrencySafe({}) !== true, `${n} should be exclusive`);
+  assert.ok(t.timeoutMs > 0, `${n} should have a positive timeoutMs`);
+}
 
 console.log(`SMOKE OK: contract + ${registered.length} tools registered`);
 console.log('  T1(ro):', EXPECTED_T1.join(', '));
 console.log('  T2(rw):', EXPECTED_T2.join(', '));
 console.log('  T3(any):', EXPECTED_T3.join(', '));
+console.log('  OPS:', EXPECTED_OPS.join(', '));

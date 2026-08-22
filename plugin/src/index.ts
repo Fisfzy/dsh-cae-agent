@@ -33,6 +33,7 @@ import { registerSetup } from './tools/setup.js'
 import { registerInteraction } from './tools/interaction.js'
 import { registerMesh } from './tools/mesh.js'
 import { registerJob } from './tools/job.js'
+import { registerLaunch } from './tools/launch.js'
 
 export const name = 'dsh-cae-agent'
 
@@ -49,6 +50,14 @@ export interface Config {
   port: number
   /** Default per-call timeout in ms. */
   timeoutMs: number
+  /** Abaqus launcher command (path to abaqus.bat / abaqus executable). */
+  abaqusCommand: string
+  /** Abaqus MCP socket-bridge plugin file loaded inside CAE. */
+  bridgePluginPath: string
+  /** Working directory where Abaqus/CAE is launched (and its startup file lives). */
+  workspaceDir: string
+  /** How long `abaqus_launch_cae` waits for the bridge to come up, in ms. */
+  launchTimeoutMs: number
 }
 
 /** Schemastery schema for {@link Config}; defaults live in the schema. */
@@ -56,6 +65,10 @@ export const Config: Schema<Config> = Schema.object({
   host: Schema.string().default('127.0.0.1'),
   port: Schema.number().default(48152),
   timeoutMs: Schema.number().default(120_000),
+  abaqusCommand: Schema.string().default('D:/SIMULIA/Commands/abaqus.bat'),
+  bridgePluginPath: Schema.string().default('C:/Users/Fisfzy/.abaqus-mcp/abaqus_mcp_plugin.py'),
+  workspaceDir: Schema.string().default('C:/Users/Fisfzy/.dsh/abaqus-cae'),
+  launchTimeoutMs: Schema.number().default(180_000),
 })
 
 /** Register every tool domain on the provided context + config. */
@@ -67,4 +80,5 @@ export function apply(ctx: Context, config: Config): void {
   registerInteraction(ctx, config)
   registerMesh(ctx, config)
   registerJob(ctx, config)
+  registerLaunch(ctx, config)
 }

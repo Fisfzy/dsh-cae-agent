@@ -6,6 +6,7 @@ import { registerSetup } from './tools/setup.js';
 import { registerInteraction } from './tools/interaction.js';
 import { registerMesh } from './tools/mesh.js';
 import { registerJob } from './tools/job.js';
+import { registerLaunch } from './tools/launch.js';
 export const name = 'dsh-cae-agent';
 /** Runtime dependencies this plugin requires before it can load. `attachments`
  * is needed by `capture_viewport` (image persistence); `tools` is the registry
@@ -16,6 +17,10 @@ export const Config = Schema.object({
     host: Schema.string().default('127.0.0.1'),
     port: Schema.number().default(48152),
     timeoutMs: Schema.number().default(120_000),
+    abaqusCommand: Schema.string().default('D:/SIMULIA/Commands/abaqus.bat'),
+    bridgePluginPath: Schema.string().default('C:/Users/Fisfzy/.abaqus-mcp/abaqus_mcp_plugin.py'),
+    workspaceDir: Schema.string().default('C:/Users/Fisfzy/.dsh/abaqus-cae'),
+    launchTimeoutMs: Schema.number().default(180_000),
 });
 /** Register every tool domain on the provided context + config. */
 export function apply(ctx, config) {
@@ -26,4 +31,5 @@ export function apply(ctx, config) {
     registerInteraction(ctx, config);
     registerMesh(ctx, config);
     registerJob(ctx, config);
+    registerLaunch(ctx, config);
 }

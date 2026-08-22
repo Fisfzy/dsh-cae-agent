@@ -38,6 +38,11 @@ DSH(agent) ──原生工具──> dsh-cae-agent(本插件, TCP) ──> Abaqu
 |---|---|
 | `abaqus_run_python` | 在 Abaqus kernel 执行任意 Python。仅当档位 1/2 覆盖不到时使用；建议在 DSH 里对其设置 `ask`/确认。 |
 
+### 运维 — 调起 Abaqus/CAE
+| 工具 | 作用 |
+|---|---|
+| `abaqus_launch_cae` | 拉启本地 Abaqus/CAE GUI 并**自动开 socket bridge**（默认 127.0.0.1:48152），之后即可用其它 `abaqus_*` 工具操作。幂等：桥已在跑则复用。需交互桌面会话（会弹 Abaqus 窗口）。 |
+
 ## 代码结构
 
 ```
@@ -57,7 +62,7 @@ plugin/
 ├── scripts/
 │   └── link-deps.ps1        # 构建期把发行包 @deepseek-ai/* junction 进 node_modules
 ├── test/
-│   ├── smoke.test.mjs       # 契约 + 20 工具注册 + 分档断言 + 并发安全
+│   ├── smoke.test.mjs       # 契约 + 21 工具注册 + 分档断言 + 并发安全
 │   ├── codegen.test.mjs     # 每个工具生成 Python 的 ast 语法校验
 │   └── load.test.mjs        # 真实 Cordis 运行时加载 + Schemastery 校验 + 卸载
 └── package.json / LICENSE / NOTICE / README.md
@@ -75,9 +80,15 @@ plugin/
         host: "127.0.0.1"
         port: 48152
         timeoutMs: 120000
+        abaqusCommand: "D:/SIMULIA/Commands/abaqus.bat"      # abaqus_launch_cae 调起用
+        bridgePluginPath: "C:/Users/Fisfzy/.abaqus-mcp/abaqus_mcp_plugin.py"  # CAE 内的 socket bridge 插件
+        workspaceDir: "C:/Users/Fisfzy/.dsh/abaqus-cae"      # launch_cae 的工作目录+startup 文件
+        launchTimeoutMs: 180000                               # launch_cae 等桥就绪的超时
 ```
 
-前提：Abaqus/CAE 已开启，运行 `Plug-ins > Abaqus MCP > Start Socket Bridge`。
+前提（二选一）：
+- **手动**：Abaqus/CAE 已开启 → `Plug-ins > Abaqus MCP > Start Socket Bridge`；
+- **自动**：调 `abaqus_launch_cae`，插件自动拉启 CAE 并加载 bridge（需交互桌面会话，会弹 Abaqus 窗口）。
 
 ## 开发与测试
 

@@ -93,6 +93,18 @@ npm test                                  # smoke + codegen（20 工具，Python
 
 `~/.dsh/cordis.patch.yml` 中 `dsh-cae-agent` 仍指向 `file:///D:/AIWORK/dsh-cae-agent/plugin/lib/index.js`（TS 构建产物），无需改动；重启 DSH 后 `window.__DSH_BOOT__.entries` 应出现 `dsh-cae-agent`。
 
+### 新增运维工具 `abaqus_launch_cae`（第 21 个工具）
+
+新增 `src/tools/launch.ts`：「一条指令调起 Abaqus/CAE」。它把插件从"依赖已运行 Abaqus"扩展到"能主动拉启 Abaqus/CAE 并自动开 bridge"：
+
+- 幂等：48152 已在监听 → 直接复用；否则拉启。
+- 在 `workspaceDir` 生成一个 startup 文件（加载 `abaqus_mcp_plugin.py` 到 `__main__` 并调用 `mcp_start()`），让 bridge **自动开**，无需手动点菜单。
+- `spawn abaquesCommand cae startup=<file>`（detached + unref，CAE 窗口存活于本工具调用之后）。
+- 轮询 bridge 端口直到可 `ping`，遵守 `exec.signal` 取消 + `launchTimeoutMs`。
+- 新增配置项：`abaqusCommand` / `bridgePluginPath` / `workspaceDir` / `launchTimeoutMs`。
+
+**约束**：调起 Abaqus/CAE 需要**交互式桌面会话**（Abaqus GUI 内核初始化依赖图形上下文）；headless 下 `from abaqus import ...` 会挂起（非脚本问题，是 Abaqus 架构）。所以该工具的用户侧验证需在桌面会话里弹窗完成。
+
 ## License
 
 MIT。详见 `plugin/LICENSE` 与 `plugin/NOTICE`。

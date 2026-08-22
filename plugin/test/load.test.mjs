@@ -36,7 +36,7 @@ const fiber = ctx.inject(plugin.inject, (child) => plugin.apply(child, cfg))
 await fiber
 await new Promise((r) => setTimeout(r, 20))
 
-// --- assert all 20 tools registered ---
+// --- assert all 21 tools registered ---
 const EXPECTED = [
   'abaqus_ping', 'abaqus_get_model_info', 'abaqus_list_jobs', 'abaqus_monitor_job',
   'abaqus_inspect_odb', 'abaqus_capture_viewport',
@@ -46,6 +46,7 @@ const EXPECTED = [
   'abaqus_generate_mesh', 'abaqus_create_interaction', 'abaqus_set_friction',
   'abaqus_submit_job', 'abaqus_set_workdir',
   'abaqus_run_python',
+  'abaqus_launch_cae',
 ]
 const names = new Set(registered.map((d) => d.name))
 for (const n of EXPECTED) {
