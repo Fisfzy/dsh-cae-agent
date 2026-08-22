@@ -1,0 +1,10 @@
+# dsh-cae-agent bundle patch: mounts the Abaqus/CAE native tool plugin.
+#
+# The plugin exposes 28 native `abaqus_*` DSH tools that drive a live Abaqus/CAE
+# session over its socket bridge (127.0.0.1:48152). Install into a profile with:
+#   cd dsh-cae-agent/plugin && dsh plugin --profile <name> add .
+# (or add "@scope/dsh-cae-agent" to the profile's dsh.profile.bundles)
+
+- insert:
+    - id: dsh-cae-agent
+      name: '@dsh-cae-agent/dsh-cae-agent'

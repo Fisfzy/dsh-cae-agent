@@ -2,7 +2,7 @@
 
 A **DSH (DeepSeek Harness) Cordis plugin** that operates a live **Abaqus/CAE** session through native tools — covering the entire modeling chain (geometry, material, mesh, contact, steps, loads, BCs, jobs, ODB). It is a migration of the Abaqus integration of [CAE-Agent-Hub](https://github.com/Cai-aa/CAE-Agent-Hub) into a native DSH plugin, replacing the prior MCP-bridge approach. **Source code is TypeScript, developed to the `dsh-plugin-dev` spec.**
 
-**Version:** `0.2.0` (`v0.2.0` tag)
+**Version:** `0.2.1` (`v0.2.1` tag)
 
 **Language:** [中文](README.md) | English
 
@@ -14,12 +14,12 @@ Abaqus/CAE runs a socket bridge (`abaqus_mcp_plugin.py`, v5 protocol, default `1
 DSH(agent) ──native tool──> dsh-cae-agent (this plugin, TCP) ──> Abaqus/CAE socket bridge ──> Abaqus kernel
 ```
 
-## Tools: 21 native tools — three authorization tiers + one ops tool
+## Tools: 28 native tools — three authorization tiers + one ops tool
 
 | Tier | Tools | Policy |
 |---|---|---|
-| **1 — read-only** (concurrency-safe) | `abaqus_ping`, `abaqus_get_model_info`, `abaqus_list_jobs`, `abaqus_monitor_job`, `abaqus_inspect_odb`, `abaqus_capture_viewport` | can be auto-authorized |
-| **2 — controlled write** (exclusive, schema-guarded) | `abaqus_create_part`, `abaqus_create_set`, `abaqus_instantiate`, `abaqus_create_material`, `abaqus_assign_section`, `abaqus_define_step`, `abaqus_apply_load`, `abaqus_set_bc`, `abaqus_generate_mesh`, `abaqus_create_interaction`, `abaqus_set_friction`, `abaqus_submit_job`, `abaqus_set_workdir` | guard/approve writes |
+| **1 — read-only** (concurrency-safe) | `abaqus_ping`, `abaqus_get_model_info`, `abaqus_list_jobs`, `abaqus_monitor_job`, `abaqus_inspect_odb`, `abaqus_capture_viewport`, `abaqus_export_results_csv` | can be auto-authorized |
+| **2 — controlled write** (exclusive, schema-guarded) | `abaqus_create_part`, `abaqus_create_set`, `abaqus_instantiate`, `abaqus_create_material`, `abaqus_assign_section`, `abaqus_define_step`, `abaqus_apply_load`, `abaqus_set_bc`, `abaqus_generate_mesh`, `abaqus_create_interaction`, `abaqus_set_friction`, `abaqus_submit_job`, `abaqus_set_workdir`, `abaqus_define_composite_layup`, `abaqus_define_orthotropic_material`, `abaqus_define_amplitude`, `abaqus_define_predefined_field`, `abaqus_set_output`, `abaqus_plot_contour` | guard/approve writes |
 | **3 — arbitrary code** (max authority) | `abaqus_run_python` | approve before use |
 | **Ops** | `abaqus_launch_cae` | launch local Abaqus/CAE + auto-open bridge |
 
@@ -39,7 +39,7 @@ Every modeling tool generates the correct Abaqus Python internally — the agent
 │   ├── src/                # ★ source code (edit here)
 │   │   ├── index.ts        #   Cordis entry: name/Config(Schemastery)/inject/apply
 │   │   ├── core.ts         #   socket-bridge client + runKernelCode (honors exec.signal)
-│   │   └── tools/          #   read/geometry/material/setup/interaction/mesh/job/launch
+│   │   └── tools/          #   read/geometry/material/setup/interaction/mesh/job/launch/composite
 │   ├── lib/                # build output (tsc from src + .d.ts; do not hand-edit)
 │   ├── tsconfig.json       # NodeNext -> lib/
 │   ├── scripts/            # link-deps.ps1 (junctions for runtime deps)
@@ -71,7 +71,12 @@ This project **references and adapts** the **socket-bridge architecture** and **
 
 **Tool coverage vs. upstream Abaqus capability:**
 - ✅ Live Abaqus session ops: `run_python` / model & job queries / `submit_job` / `monitor_job` / `inspect_odb` / `capture_viewport` / `set_workdir` (covers its MCP tool surface, **plus a complete modeling-write chain**: part/set/assembly/material/section/step/load/BC/mesh/contact/friction, and an ops tool `abaqus_launch_cae`)
+- ✅ **Composite/advanced**: `abaqus_define_composite_layup` (**shell composite** `CompositeShellSection`+`SectionLayer`, default SHELL/S4R), `abaqus_define_orthotropic_material`, `abaqus_define_amplitude`, `abaqus_define_predefined_field`, `abaqus_set_output`
+- ✅ **Post-processing**: `abaqus_plot_contour` (viewport contour), `abaqus_export_results_csv` (ODB→CSV), `capture_viewport` + vision read
+- ✅ **Step extension**: `define_step` now supports `heat`/`coupled`
 - ⚠️ Upstream workflow-**guidance SKILLs** (geometry/material/mesh/step/load/bc/static/modal/dynamic/thermal/contact, etc.): this plugin covers the underlying capability with directly-executable native tools, but does not ship the upstream SKILL instruction set
+
+**Deliberate divergence**: composite/laminate uses the **shell** approach (S4R + `CompositeShellSection`), not the upstream `*Solid Section, composite` solid laminate — per project requirement to avoid 3D solid elements. Source contains **no machine-specific/hardcoded paths** (Abaqus command comes from env/config; tests use `os.tmpdir()`).
 - ⚠️ `result_mesh.json` **browser viewer**: not provided (judged low-value)
 - ⚠️ Tosca **shape/topology optimization**: no dedicated tool; use `abaqus_run_python` manually
 

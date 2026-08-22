@@ -39,7 +39,7 @@ DSH(agent) ──原生工具──> dsh-cae-agent（本插件, TCP）──> Ab
 │   ├── src/                # ★ 源码（要改这里）
 │   │   ├── index.ts        #   Cordis 入口: name/Config(Schemastery)/inject/apply
 │   │   ├── core.ts         #   socket-bridge 客户端 + runKernelCode（支持 exec.signal）
-│   │   └── tools/          #   read/geometry/material/setup/interaction/mesh/job/launch
+│   │   └── tools/          #   read/geometry/material/setup/interaction/mesh/job/launch/composite
 │   ├── lib/                # 构建产物（tsc 从 src 编译输出 + .d.ts，勿手改）
 │   ├── tsconfig.json       # NodeNext -> lib/
 │   ├── scripts/            # link-deps.ps1（junction 运行时依赖）
@@ -69,13 +69,16 @@ npm run e2e                              # 真机回归：连 48152 桥跑 19 �
 
 本项目**参考并借鉴**了 [CAE-Agent-Hub](https://github.com/Cai-aa/CAE-Agent-Hub)（MIT，Copyright 2026 Thompson Labs）与 [Abaqus-Control-MCP](https://github.com/Whfkl/Abaqus-Control-MCP)（MIT）的 **socket-bridge 架构**和 **Abaqus 建模方法论**，在此基础上**独立重写并扩展**为 DSH 原生 Cordis 插件，并非对上游的一比一复刻或完整实现。
 
-**工具能力覆盖（对照上游 Abaqus 能力）：**
-- ✅ Abaqus 实时会话操作：`run_python` / 模型与作业查询 / `submit_job` / `monitor_job` / `inspect_odb` / `capture_viewport` / `set_workdir`（覆盖其 MCP 工具面，并**新增完整建模写链**：部件/集合/装配/材料/截面/步/荷载/边界/网格/接触/摩擦，及运维工具 `abaqus_launch_cae`）
-- ⚠️ 上游以 SKILL 文本提供的**建模/分析流程指引**（几何/材料/网格/step/load/bc/static/modal/dynamic/thermal/contact 等）：本插件以**可直接执行的原生工具**覆盖其底层能力，但未照搬其 SKILL 指令集
-- ⚠️ `result_mesh.json` **Web 浏览器查看器**：本插件未提供（用户判断该功能价值不大）
-- ⚠️ Tosca **形状/拓扑优化**：未专设工具，需通过 `abaqus_run_python` 手动调用
+**工具能力覆盖（对照上游 Abaqus 能力，v0.2.1 · 28 工具）：**
+- ✅ Abaqus 实时会话操作：`run_python` / 模型与作业查询 / `submit_job` / `monitor_job` / `inspect_odb` / `capture_viewport` / `set_workdir`
+- ✅ 完整原生建模写链：部件/集合/装配/材料/截面/步/荷载/边界/网格/接触/摩擦/作业 + `abaqus_launch_cae`
+- ✅ **复合/高级建模**：`abaqus_define_composite_layup`（**壳复合** `CompositeShellSection`+`SectionLayer`，默认 SHELL/S4R）、`abaqus_define_orthotropic_material`（工程常数/正交/各向异性）、`abaqus_define_amplitude`（时变）、`abaqus_define_predefined_field`（初始场/预定义场）、`abaqus_set_output`（场/历史输出）
+- ✅ **结果后处理**：`abaqus_plot_contour`（视口云图）、`abaqus_export_results_csv`（ODB→CSV）、`capture_viewport` + 视觉读图
+- ✅ **分析步扩展**：`define_step` 支持 `heat`/`coupled`（温度/耦合分析）
+- ⚠️ 上游以 SKILL 文本提供的**建模/分析流程指引**：本插件以**可直接执行的原生工具**覆盖其底层能力，但未照搬其 SKILL 指令集
+- ⚠️ `result_mesh.json` **Web 浏览器查看器**、Tosca **形状/拓扑优化**：未提供（优化需经 `run_python` 调用）
 
-**差异点**：不携带上游 `Skill/abaqus/*` 指令目录（第三方内容不随仓库分发）；部分能力强于上游（完整原生写链、一次性拉启 Abaqus）。
+**差异点**：① 不携带上游 `Skill/abaqus/*` 目录（第三方内容不随仓库分发）；② **复合材料/层合板故意采用「壳复合」（S4R + `CompositeShellSection`），而非上游 `*Solid Section, composite` 的实体叠层**——按项目要求避免 3D 实体单元；③ 源码**无机器特定/硬编码路径**（Abaqus 命令等走环境变量/配置，测试在 `os.tmpdir()`）。
 
 上游归属声明见 [`plugin/NOTICE`](plugin/NOTICE) 与 [`LICENSE`](LICENSE)。
 

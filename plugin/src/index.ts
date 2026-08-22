@@ -65,14 +65,9 @@ export interface Config {
 }
 
 /** Resolve the Abaqus launcher command without machine-specific hardcoding:
- * try a few common install locations + PATH; last resort is bare `abaqus`. */
+ * prefer an explicit env override, then a bare `abaqus` on PATH. */
 function defaultAbaqusCommand(): string {
-  const candidates = [
-    process.env.ABAQUS_COMMAND,
-    'D:/SIMULIA/Commands/abaqus.bat',
-    'C:/SIMULIA/Commands/abaqus.bat',
-    'abaqus',
-  ].filter(Boolean) as string[]
+  const candidates = [process.env.ABAQUS_COMMAND, 'abaqus'].filter(Boolean) as string[]
   for (const c of candidates) {
     if (c === 'abaqus') return c
     try { if (fs.existsSync(c)) return c } catch { /* keep looking */ }

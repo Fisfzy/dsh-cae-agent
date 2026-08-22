@@ -1,5 +1,8 @@
 // validate-fixes.mjs — verify tool fixes + distilled skills (composite/ortho-mat/amplitude/field/output/plot/csv) against the live bridge.
+// Self-contained + portable: builds its own models and ODB in os.tmpdir(); no machine-specific paths.
 import net from 'node:net'
+import os from 'node:os'
+import path from 'node:path'
 import { Config, apply } from '../lib/index.js'
 
 const HOST = '127.0.0.1'
@@ -112,11 +115,35 @@ result="ok"`)
   const heat = await runTool('abaqus_define_step', { model: 'FixHeat', name: 'Heat-1', type: 'heat', timePeriod: 1.0 })
   report('define_step heat (extension)', !!heat && heat.step === 'Heat-1' && heat.type === 'heat', `step=${heat?.step} proc=${heat?.procedure}`)
 
-  // plot_contour + export_results_csv on the existing 0/90/0/90 ODB
-  const plot = await runTool('abaqus_plot_contour', { odbPath: 'D:/temp/CompJob.odb', fieldVariable: 'U', invariant: 'Magnitude', scaleFactor: 50, view: 'Iso' })
-  report('plot_contour (U/Magnitude on CompJob.odb)', !!plot && plot.field === 'U', `field=${plot?.field} frame=${plot?.frame}`)
-  const csv = await runTool('abaqus_export_results_csv', { odbPath: 'D:/temp/CompJob.odb', outputPath: 'D:/temp/CompJob_S.csv', fieldVariable: 'S' })
-  report('export_results_csv (S)', !!csv && csv.rows > 0, `rows=${csv?.rows} cols=${csv?.cols}`)
+  // --- self-contained: build + run a small composite job in tmpdir, then plot/csv on its ODB ---
+  const tmp = os.tmpdir()
+  await runTool('abaqus_set_workdir', { path: tmp })
+  await runTool('abaqus_generate_mesh', { model: 'FixComp', part: 'CPlate', elementFamily: 'shell', size: 20 })
+  await kernel(`from abaqus import mdb
+p=mdb.models["FixComp"].parts["CPlate"]
+be=p.edges.findAt(((50,0,0),)); te=p.edges.findAt(((50,100,0),))
+p.Set(name="BotEdge", edges=be); p.Set(name="TopEdge", edges=te)
+result="ok"`)
+  await runTool('abaqus_set_bc', { model: 'FixComp', type: 'encastre', region: 'BotEdge', instance: 'CPlate-1', step: 'Step-1', name: 'BCfix' })
+  await runTool('abaqus_set_bc', { model: 'FixComp', type: 'displacement', region: 'TopEdge', instance: 'CPlate-1', step: 'Step-1', u2: 0.5, name: 'BCdisp' })
+  await kernel(`from abaqus import mdb
+if "FixJob" in mdb.jobs: del mdb.jobs["FixJob"]
+mdb.Job(name="FixJob", model="FixComp"); mdb.jobs["FixJob"].submit(consistencyChecking=False)
+result="ok"`)
+  let okJob = false
+  for (let i = 0; i < 40; i++) {
+    const st = await kernel(`from abaqus import mdb
+result=str(mdb.jobs["FixJob"].status)`)
+    if (st === 'COMPLETED') { okJob = true; break }
+    if (st === 'ABORTED') break
+    await new Promise((r) => setTimeout(r, 1000))
+  }
+  report('composite job completed (for plot/csv)', okJob, 'generated ODB in tmpdir')
+  const odb = path.join(tmp, 'FixJob.odb')
+  const plot = await runTool('abaqus_plot_contour', { odbPath: odb, fieldVariable: 'U', invariant: 'Magnitude', scaleFactor: 50, view: 'Iso' })
+  report('plot_contour (U/Magnitude)', !!plot && plot.field === 'U', `field=${plot?.field} frame=${plot?.frame}`)
+  const csv = await runTool('abaqus_export_results_csv', { odbPath: odb, outputPath: path.join(tmp, 'FixJob_U.csv'), fieldVariable: 'U' })
+  report('export_results_csv (U)', !!csv && csv.rows > 0, `rows=${csv?.rows} cols=${csv?.cols}`)
 } catch (e) {
   report('unexpected error', false, String(e?.message || e))
 } finally {

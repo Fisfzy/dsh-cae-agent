@@ -17,14 +17,9 @@ export const name = 'dsh-cae-agent';
  * every tool is registered on. Both are required, so both belong in inject. */
 export const inject = ['tools', 'attachments'];
 /** Resolve the Abaqus launcher command without machine-specific hardcoding:
- * try a few common install locations + PATH; last resort is bare `abaqus`. */
+ * prefer an explicit env override, then a bare `abaqus` on PATH. */
 function defaultAbaqusCommand() {
-    const candidates = [
-        process.env.ABAQUS_COMMAND,
-        'D:/SIMULIA/Commands/abaqus.bat',
-        'C:/SIMULIA/Commands/abaqus.bat',
-        'abaqus',
-    ].filter(Boolean);
+    const candidates = [process.env.ABAQUS_COMMAND, 'abaqus'].filter(Boolean);
     for (const c of candidates) {
         if (c === 'abaqus')
             return c;
