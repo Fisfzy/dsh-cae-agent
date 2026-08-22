@@ -2,7 +2,7 @@
 
 一个 **DSH（DeepSeek Harness）的 Cordis 插件**，通过 **原生工具**直接操作本机正在运行的 **Abaqus/CAE** 会话，覆盖完整建模链（几何、材料、网格、接触、分析步、载荷、边界、作业、ODB）。它是将 [CAE-Agent-Hub](https://github.com/Cai-aa/CAE-Agent-Hub) 的 Abaqus 集成迁移为 DSH 原生插件，取代了原先的 MCP 桥接方案。**源代码为 TypeScript，按 `dsh-plugin-dev` 规范开发。**
 
-**版本：** `0.2.0`（`plugin/` 内另有 `v0.2.0` tag）
+**版本：** `0.2.1`（`plugin/` 内另有 `v0.2.1` tag）
 
 **语言：** 中文 | [English](README.en.md)
 
@@ -14,12 +14,12 @@ Abaqus/CAE 内运行一个 socket bridge（`abaqus_mcp_plugin.py`，v5 协议，
 DSH(agent) ──原生工具──> dsh-cae-agent（本插件, TCP）──> Abaqus/CAE socket bridge ──> Abaqus kernel
 ```
 
-## 工具：21 个原生工具，三档授权 + 一个运维工具
+## 工具：28 个原生工具，三档授权 + 一个运维工具
 
 | 类别 | 工具 | 策略 |
 |---|---|---|
-| **1 — 只读**（并发安全） | `abaqus_ping`、`abaqus_get_model_info`、`abaqus_list_jobs`、`abaqus_monitor_job`、`abaqus_inspect_odb`、`abaqus_capture_viewport` | 可直接放行 |
-| **2 — 受控写**（独占 + schema 守卫） | `abaqus_create_part`、`abaqus_create_set`、`abaqus_instantiate`、`abaqus_create_material`、`abaqus_assign_section`、`abaqus_define_step`、`abaqus_apply_load`、`abaqus_set_bc`、`abaqus_generate_mesh`、`abaqus_create_interaction`、`abaqus_set_friction`、`abaqus_submit_job`、`abaqus_set_workdir` | 写操作需门禁/确认 |
+| **1 — 只读**（并发安全） | `abaqus_ping`、`abaqus_get_model_info`、`abaqus_list_jobs`、`abaqus_monitor_job`、`abaqus_inspect_odb`、`abaqus_capture_viewport`、`abaqus_export_results_csv` | 可直接放行 |
+| **2 — 受控写**（独占 + schema 守卫） | `abaqus_create_part`、`abaqus_create_set`、`abaqus_instantiate`、`abaqus_create_material`、`abaqus_assign_section`、`abaqus_define_step`、`abaqus_apply_load`、`abaqus_set_bc`、`abaqus_generate_mesh`、`abaqus_create_interaction`、`abaqus_set_friction`、`abaqus_submit_job`、`abaqus_set_workdir`、`abaqus_define_composite_layup`、`abaqus_define_orthotropic_material`、`abaqus_define_amplitude`、`abaqus_define_predefined_field`、`abaqus_set_output`、`abaqus_plot_contour` | 写操作需门禁/确认 |
 | **3 — 任意代码**（最高权限） | `abaqus_run_python` | 使用前需确认 |
 | **运维** | `abaqus_launch_cae` | 拉启本机 Abaqus/CAE 并自动开 bridge |
 

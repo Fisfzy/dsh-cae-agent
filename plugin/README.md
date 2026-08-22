@@ -27,10 +27,11 @@ DSH(agent) ──原生工具──> dsh-cae-agent(本插件, TCP) ──> Abaqu
 | 域 | 工具 |
 |---|---|
 | 几何 | `abaqus_create_part`（box/cylinder 基元）、`abaqus_create_set`（按类型/坐标选几何）、`abaqus_instantiate` |
-| 材料+截面 | `abaqus_create_material`（弹性/塑性/密度/热）、`abaqus_assign_section`（solid/shell） |
-| 分析 | `abaqus_define_step`（static/dynamic/modal）、`abaqus_apply_load`（pressure/concentrated/gravity）、`abaqus_set_bc`（encastre/pinned/displacement/symmetry） |
+| 材料+截面 | `abaqus_create_material`（弹性/塑性/密度/热）、`abaqus_define_orthotropic_material`（工程常数/正交/各向异性）、`abaqus_assign_section`（solid/shell）、`abaqus_define_composite_layup`（铺层 SectionLayer） |
+| 分析 | `abaqus_define_step`（static/dynamic/modal/heat/coupled）、`abaqus_apply_load`（pressure/concentrated/gravity）、`abaqus_set_bc`（encastre/pinned/displacement/symmetry）、`abaqus_define_amplitude`（时变）、`abaqus_define_predefined_field`（初始场/预定义场）、`abaqus_set_output`（场/历史输出） |
 | 接触 | `abaqus_create_interaction`（contact/tie）、`abaqus_set_friction` |
 | 网格 | `abaqus_generate_mesh`（C3D8R/C3D4R/S4R，自动种子） |
+| 结果 | `abaqus_plot_contour`（视口云图）、`abaqus_export_results_csv`（ODB→CSV） |
 | 作业 | `abaqus_submit_job`、`abaqus_set_workdir` |
 
 ### 档位 3 — 任意代码兜底（最高权限）

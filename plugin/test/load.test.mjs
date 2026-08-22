@@ -45,6 +45,13 @@ const EXPECTED = [
   'abaqus_define_step', 'abaqus_apply_load', 'abaqus_set_bc',
   'abaqus_generate_mesh', 'abaqus_create_interaction', 'abaqus_set_friction',
   'abaqus_submit_job', 'abaqus_set_workdir',
+  'abaqus_define_composite_layup',
+  'abaqus_define_orthotropic_material',
+  'abaqus_define_amplitude',
+  'abaqus_define_predefined_field',
+  'abaqus_set_output',
+  'abaqus_plot_contour',
+  'abaqus_export_results_csv',
   'abaqus_run_python',
   'abaqus_launch_cae',
 ]

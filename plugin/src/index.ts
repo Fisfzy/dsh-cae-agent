@@ -37,6 +37,7 @@ import { registerInteraction } from './tools/interaction.js'
 import { registerMesh } from './tools/mesh.js'
 import { registerJob } from './tools/job.js'
 import { registerLaunch } from './tools/launch.js'
+import { registerComposite } from './tools/composite.js'
 
 export const name = 'dsh-cae-agent'
 
@@ -118,4 +119,5 @@ export function apply(ctx: Context, config: Config): void {
   registerMesh(ctx, config)
   registerJob(ctx, config)
   registerLaunch(ctx, config)
+  registerComposite(ctx, config)
 }

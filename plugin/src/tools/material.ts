@@ -80,6 +80,75 @@ result={"model":${model},"name":mat.name,"materialExists":mat.name in m.material
 
   ctx.tools.register(
     defineTool({
+      name: 'abaqus_define_orthotropic_material',
+      description:
+        'Create an anisotropic/orthotropic Abaqus material (for composites / engineered materials). elasticType: ENGINEERING_CONSTANTS (lamina: E1,E2,E3,nu12,nu13,nu23,G12,G13,G23), ORTHOTROPIC (stiffness D11..D66), or ANISOTROPIC (full stiffness, 21 terms). `table` is a JSON array of data rows; provide density for inertia. Units mm-tonne-s-N-MPa.',
+      parameters: {
+        model: { type: 'string', required: true, description: 'Model name' },
+        name: { type: 'string', required: true, description: 'Material name' },
+        elasticType: {
+          type: 'string',
+          enum: ['ENGINEERING_CONSTANTS', 'ORTHOTROPIC', 'ANISOTROPIC'],
+          description: 'Elastic model (default ENGINEERING_CONSTANTS)',
+        },
+        table: {
+          type: 'string',
+          required: true,
+          description:
+            'JSON array of rows, e.g. "[[E1,E2,E3,nu12,nu13,nu23,G12,G13,G23]]" for ENGINEERING_CONSTANTS, or [[D11,D22,D33,D12,D13,D23,D44,D55,D66]] for ORTHOTROPIC.',
+        },
+        density: { type: 'number', description: 'Density (t/mm^3) for inertia/infrastructure' },
+      },
+      output: {
+        schema: { type: 'object', additionalProperties: true },
+        render: (_args, value) => {
+          const v = (value ?? {}) as JsonRecord
+          return [
+            { type: 'text', text: `Orthotropic material "${String(v.name ?? '')}" (${String(v.elasticType ?? '')}) on model "${String(v.model ?? '')}" (rows=${String(v.rows ?? 0)})` },
+          ]
+        },
+      },
+      async execute(args, exec) {
+        const model = JSON.stringify(String(args.model))
+        const name = JSON.stringify(String(args.name))
+        const etype = String(args.elasticType || 'ENGINEERING_CONSTANTS').toUpperCase()
+        if (!['ENGINEERING_CONSTANTS', 'ORTHOTROPIC', 'ANISOTROPIC'].includes(etype)) {
+          throw new Error('elasticType must be ENGINEERING_CONSTANTS|ORTHOTROPIC|ANISOTROPIC')
+        }
+        let table: unknown
+        try {
+          table = JSON.parse(String(args.table || '[]'))
+        } catch {
+          throw new Error('table must be a valid JSON array of rows')
+        }
+        if (!Array.isArray(table) || table.length === 0) {
+          throw new Error('table must be a non-empty JSON array of data rows')
+        }
+        const density = args.density !== undefined && args.density !== null ? Number(args.density) : null
+        const r = await runKernelCode(
+          br,
+          `from abaqusConstants import ENGINEERING_CONSTANTS, ORTHOTROPIC, ANISOTROPIC
+from abaqus import mdb
+m=mdb.models[${model}]
+mat=m.Material(name=${name})
+_emap={"ENGINEERING_CONSTANTS":ENGINEERING_CONSTANTS,"ORTHOTROPIC":ORTHOTROPIC,"ANISOTROPIC":ANISOTROPIC}
+_etype=_emap[${JSON.stringify(etype)}]
+_tbl=[[float(x) for x in row] for row in ${JSON.stringify(table)}]
+mat.Elastic(table=_tbl, type=_etype)
+${density !== null ? `mat.Density(table=[[${density}]])` : ''}
+result={"model":${model},"name":mat.name,"elasticType":${JSON.stringify(etype)},"rows":len(_tbl)}`,
+          config.timeoutMs,
+          exec.signal,
+        )
+        return r.value as JsonRecord
+      },
+      timeoutMs: config.timeoutMs,
+      isConcurrencySafe: () => false,
+    }),
+  )
+
+  ctx.tools.register(
+    defineTool({
       name: 'abaqus_assign_section',
       description:
         'Create a section referencing an existing material and assign it to a region of a part. Region is chosen by a named set on the part/assembly, or by bare geometric cell/face/edge indices (0-based). sectionType: solid|shell|beam (auto-selected from geometry when omitted: cells->solid, faces->shell). thickness only for shell.',

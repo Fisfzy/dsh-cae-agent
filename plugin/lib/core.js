@@ -92,10 +92,10 @@ export function bridgeRequest(handle, method, params, timeoutMs = DEFAULT_TIMEOU
                 `Start Abaqus/CAE and run Plug-ins > Abaqus MCP > Start Socket Bridge. (${err.message})`));
         });
         socket.connect(handle.port, handle.host, () => {
-            socket.write(payload + '\n');
+            socket.write(Buffer.from(payload + '\n'));
         });
         socket.on('data', (chunk) => {
-            chunks.push(chunk);
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
             const buf = Buffer.concat(chunks);
             const nl = buf.indexOf(0x0a); // '\n'
             if (nl < 0)

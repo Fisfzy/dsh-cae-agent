@@ -155,7 +155,8 @@ else: raise ValueError("region must be cells|faces|edges|vertices")
 if spec is None:
     sel=col[:]
 elif isinstance(spec,dict) and spec.get("points"):
-    sel=target.findAt(*(spec["points"]), printWarning=False)
+    pt=tuple(tuple(float(c) for c in pp) for pp in spec["points"])
+    sel=col.findAt(pt, printWarning=False)
 else:
     sel=[col[i] for i in spec]
 # replace existing set of same name

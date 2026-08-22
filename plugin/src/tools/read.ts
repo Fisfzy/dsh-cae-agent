@@ -314,4 +314,154 @@ result`,
       isConcurrencySafe: () => true,
     }),
   )
+
+  ctx.tools.register(
+    defineTool({
+      name: 'abaqus_plot_contour',
+      description:
+        'Set the active viewport to show a field-output contour of an open (or newly opened) ODB, so abaqus_capture_viewport can grab a meaningful results image. fieldVariable: S, U, RF, E, NT, ... Optionally pick an invariant (Mises/Magnitude/PRESS) or a component (U2/S11/...). frameIndex defaults to the last frame; scaleFactor applies uniform deformation scaling; view is a named view (Iso/Front/...).',
+      parameters: {
+        odbPath: { type: 'string', description: 'ODB path; leave empty to use the current viewport object' },
+        fieldVariable: { type: 'string', required: true, description: 'Field output variable, e.g. S, U, RF, E, NT' },
+        invariant: { type: 'string', description: 'Invariant refinement, e.g. Mises, Magnitude, PRESS' },
+        component: { type: 'string', description: 'Component refinement, e.g. U2, S11, S12' },
+        frameIndex: { type: 'number', description: '0-based frame index; default = last frame' },
+        scaleFactor: { type: 'number', description: 'Uniform deformation scale factor (default 1)' },
+        view: { type: 'string', description: 'Named view, e.g. Iso, Front, Top, Left' },
+      },
+      output: {
+        schema: { type: 'object', additionalProperties: true },
+        render: (_args, value) => {
+          const v = (value ?? {}) as JsonRecord
+          return [
+            { type: 'text', text: `Plot: ${String(v.field ?? '')} on frame ${String(v.frame ?? 0)}${v.view ? ` view=${String(v.view)}` : ''}` },
+          ]
+        },
+      },
+      async execute(args, exec) {
+        const path = args.odbPath ? JSON.stringify(String(args.odbPath)) : 'None'
+        const varn = JSON.stringify(String(args.fieldVariable))
+        const inv = args.invariant ? JSON.stringify(String(args.invariant)) : 'None'
+        const comp = args.component ? JSON.stringify(String(args.component)) : 'None'
+        const frameIdx = args.frameIndex !== undefined && args.frameIndex !== null ? Number(args.frameIndex) : null
+        const scale = args.scaleFactor !== undefined && args.scaleFactor !== null ? Number(args.scaleFactor) : 1
+        const view = args.view ? JSON.stringify(String(args.view)) : 'None'
+        const r = await runKernelCode(
+          br,
+          `from abaqus import session
+from abaqusConstants import UNIFORM, INTEGRATION_POINT, NODAL, INVARIANT, COMPONENT
+path=${path}
+varn=${varn}
+inv=${inv}
+comp=${comp}
+frameIdx=${frameIdx === null ? 'None' : frameIdx}
+scale=${scale}
+view=${view}
+vp=session.viewports['Viewport: 1']
+if path is not None:
+    odb=session.openOdb(name=path)
+    vp.setValues(displayedObject=odb)
+pos=INTEGRATION_POINT if varn in ('S','E','LE','PE','CSTRESS','CLE') else NODAL
+ref=None
+if inv is not None: ref=(INVARIANT, str(inv))
+elif comp is not None: ref=(COMPONENT, str(comp))
+if ref is not None:
+    vp.odbDisplay.setPrimaryVariable(variableLabel=varn, outputPosition=pos, refinement=ref)
+else:
+    vp.odbDisplay.setPrimaryVariable(variableLabel=varn, outputPosition=pos)
+# select a frame (default last frame of the last non-empty step)
+fi=frameIdx
+si=0
+try:
+    odb=vp.displayedObject
+    allst=list(odb.steps.keys())
+    stkeys=[k for k in allst if len(odb.steps[k].frames)>0]
+    if stkeys:
+        si=allst.index(stkeys[-1])
+        nfr=len(odb.steps[stkeys[-1]].frames)
+        if fi is None: fi=nfr-1
+        fi=min(max(0,int(fi)), nfr-1)
+        vp.odbDisplay.setFrame(step=si, frame=fi)
+except Exception: pass
+vp.odbDisplay.commonOptions.setValues(deformationScaling=UNIFORM, uniformScaleFactor=scale)
+if view is not None:
+    try: vp.view.setValues(session.views[view])
+    except Exception: pass
+result={'field':varn,'frame':fi if fi is not None else 'last','view':view,'scale':scale}`,
+          60_000,
+          exec.signal,
+        )
+        return r.value as JsonRecord
+      },
+      timeoutMs: 60_000,
+      isConcurrencySafe: () => false,
+    }),
+  )
+
+  ctx.tools.register(
+    defineTool({
+      name: 'abaqus_export_results_csv',
+      description:
+        'Export one field-output frame of an ODB to a CSV file. Each row is one value (node or integration-point) with its label(s) and data columns; the header lists the component labels. Useful for spreadsheet/post analysis.',
+      parameters: {
+        odbPath: { type: 'string', required: true, description: 'ODB path' },
+        outputPath: { type: 'string', required: true, description: 'Absolute output .csv path' },
+        fieldVariable: { type: 'string', required: true, description: 'Field output variable, e.g. S, U, RF' },
+        stepName: { type: 'string', description: 'Step name (default = last non-initial step with frames)' },
+        frameIndex: { type: 'number', description: '0-based frame index (default = last frame)' },
+      },
+      output: {
+        schema: { type: 'object', additionalProperties: true },
+        render: (_args, value) => {
+          const v = (value ?? {}) as JsonRecord
+          return [{ type: 'text', text: `Exported ${String(v.rows ?? 0)} rows to ${String(v.file ?? '')}` }]
+        },
+      },
+      async execute(args, exec) {
+        const path = JSON.stringify(String(args.odbPath))
+        const out = JSON.stringify(String(args.outputPath))
+        const varn = JSON.stringify(String(args.fieldVariable))
+        const stepName = args.stepName ? JSON.stringify(String(args.stepName)) : 'None'
+        const frameIdx = args.frameIndex !== undefined && args.frameIndex !== null ? Number(args.frameIndex) : null
+        const r = await runKernelCode(
+          br,
+          `import csv
+from abaqus import session
+path=${path}
+out=${out}
+varn=${varn}
+stepName=${stepName}
+frameIdx=${frameIdx === null ? 'None' : frameIdx}
+if path not in session.odbs: session.openOdb(name=path)
+odb=session.odbs[path]
+if stepName is None:
+    st=[k for k in odb.steps.keys() if len(odb.steps[k].frames)>0]
+    if not st: raise RuntimeError("no ODB step with frames")
+    st=st[-1]
+else: st=stepName
+nfr=len(odb.steps[st].frames)
+fi= nfr-1 if frameIdx is None else min(max(0,int(frameIdx)),nfr-1)
+fo=odb.steps[st].frames[fi].fieldOutputs[varn]
+cols=list(fo.componentLabels)
+rows=[]
+for v in fo.values:
+    lab = getattr(v,'nodeLabel',None) if hasattr(v,'nodeLabel') else getattr(v,'elementLabel',None)
+    ip = getattr(v,'integrationPoint',None) if hasattr(v,'integrationPoint') else None
+    row=[lab]
+    if ip is not None: row.append(ip)
+    row.extend([float(d) for d in v.data])
+    rows.append(row)
+header=['label'+('_ip' if ip is not None else '')]+cols
+with open(out,'w',newline='') as fh:
+    w=csv.writer(fh); w.writerow(header); w.writerows(rows)
+result={'file':out,'step':st,'frame':fi,'variable':varn,'rows':len(rows),'cols':cols}`,
+          60_000,
+          exec.signal,
+        )
+        return r.value as JsonRecord
+      },
+      timeoutMs: 60_000,
+      isConcurrencySafe: () => true,
+    }),
+  )
 }

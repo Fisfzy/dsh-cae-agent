@@ -27,13 +27,19 @@ apply(fakeCtx, config);
 
 const names = new Set(registered.map((d) => d.name));
 
-const EXPECTED_T1 = ['abaqus_ping', 'abaqus_get_model_info', 'abaqus_list_jobs', 'abaqus_monitor_job', 'abaqus_inspect_odb', 'abaqus_capture_viewport'];
+const EXPECTED_T1 = ['abaqus_ping', 'abaqus_get_model_info', 'abaqus_list_jobs', 'abaqus_monitor_job', 'abaqus_inspect_odb', 'abaqus_capture_viewport', 'abaqus_export_results_csv'];
 const EXPECTED_T2 = [
   'abaqus_create_part', 'abaqus_create_set', 'abaqus_instantiate',
   'abaqus_create_material', 'abaqus_assign_section',
   'abaqus_define_step', 'abaqus_apply_load', 'abaqus_set_bc',
   'abaqus_generate_mesh', 'abaqus_create_interaction', 'abaqus_set_friction',
   'abaqus_submit_job', 'abaqus_set_workdir',
+  'abaqus_define_composite_layup',
+  'abaqus_define_orthotropic_material',
+  'abaqus_define_amplitude',
+  'abaqus_define_predefined_field',
+  'abaqus_set_output',
+  'abaqus_plot_contour',
 ];
 const EXPECTED_T3 = ['abaqus_run_python'];
 const EXPECTED_OPS = ['abaqus_launch_cae'];
@@ -66,6 +72,7 @@ const T1_VALID_ARGS = {
   abaqus_monitor_job: { jobName: '' },
   abaqus_inspect_odb: { odbPath: 'C:/tmp/x.odb' },
   abaqus_capture_viewport: { viewportName: '' },
+  abaqus_export_results_csv: { odbPath: 'C:/tmp/x.odb', outputPath: 'C:/tmp/x.csv', fieldVariable: 'S' },
 };
 for (const n of EXPECTED_T1) {
   const t = registered.find((d) => d.name === n);

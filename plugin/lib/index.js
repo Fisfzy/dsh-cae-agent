@@ -10,6 +10,7 @@ import { registerInteraction } from './tools/interaction.js';
 import { registerMesh } from './tools/mesh.js';
 import { registerJob } from './tools/job.js';
 import { registerLaunch } from './tools/launch.js';
+import { registerComposite } from './tools/composite.js';
 export const name = 'dsh-cae-agent';
 /** Runtime dependencies this plugin requires before it can load. `attachments`
  * is needed by `capture_viewport` (image persistence); `tools` is the registry
@@ -75,4 +76,5 @@ export function apply(ctx, config) {
     registerMesh(ctx, config);
     registerJob(ctx, config);
     registerLaunch(ctx, config);
+    registerComposite(ctx, config);
 }
