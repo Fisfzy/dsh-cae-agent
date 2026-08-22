@@ -63,26 +63,33 @@ export function registerGeometry(ctx: Context, config: { host: string; port: num
         const primitive = String(args.primitive ?? 'box')
         const r = await runKernelCode(
           br,
-          `from abaqusConstants import THREE_D, FOUR_NODE_TET
+          `from abaqusConstants import THREE_D, DEFORMABLE_BODY, DISCRETE_RIGID_SURFACE, ANALYTIC_RIGID_SURFACE
 from abaqus import mdb
 m=mdb.models[${model}]
 name=${name}
 if name in m.parts: del m.parts[name]
-shape=${JSON.stringify(shape)}
-ptype=${JSON.stringify(ptype)}
-part=m.Part(name=name, dimensionality=THREE_D, type=ptype, shape=shape)
+ptype_raw=${JSON.stringify(ptype)}
+ptype_map={"DEFORMABLE":DEFORMABLE_BODY,"DISCRETE_RIGID":DISCRETE_RIGID_SURFACE,"ANALYTIC_RIGID":ANALYTIC_RIGID_SURFACE}
+if ptype_raw not in ptype_map:
+    raise ValueError("type must be DEFORMABLE|DISCRETE_RIGID|ANALYTIC_RIGID")
+ptype=ptype_map[ptype_raw]
+part=m.Part(name=name, dimensionality=THREE_D, type=ptype)
 origin=(0.0,0.0,0.0)
 prim=${JSON.stringify(primitive)}
 if prim=="box":
     w=${Number(args.boxX ?? 1.0)}; d=${Number(args.boxY ?? 1.0)}; h=${Number(args.boxZ ?? 1.0)}
-    s=part.MainSketch(name="_profile_", objectToCopy=None)
+    s=m.ConstrainedSketch(name="_profile_", sheetSize=10.0)
     s.rectangle(point1=(0,0), point2=(w,d))
     part.BaseSolidExtrude(sketch=s, depth=h)
+    try: del m.sketches["_profile_"]
+    except Exception: pass
 elif prim=="cylinder":
     r=${Number(args.radius ?? 1.0)}; he=${Number(args.height ?? 1.0)}
-    s=part.MainSketch(name="_profile_", objectToCopy=None)
+    s=m.ConstrainedSketch(name="_profile_", sheetSize=10.0)
     s.CircleByCenterPerimeter(center=(0.0,0.0), point1=(r,0.0))
     part.BaseSolidExtrude(sketch=s, depth=he)
+    try: del m.sketches["_profile_"]
+    except Exception: pass
 result={"model":${model},"name":part.name,"exists":part.name in m.parts,"cells":len(part.cells),"faces":len(part.faces),"edges":len(part.edges)}`,
           config.timeoutMs,
           exec.signal,
@@ -137,7 +144,7 @@ m=mdb.models[${model}]
 name=${name}
 target = m.rootAssembly if ${JSON.stringify(String(args.part || 'Assembly'))}.lower()=="assembly" else m.parts[${part}]
 region=${JSON.stringify(region)}
-spec=${JSON.stringify(spec)}
+spec=${spec === null ? 'None' : JSON.stringify(spec)}
 # choose the geometric collection
 if region=="cells": col=target.cells
 elif region=="faces": col=target.faces
@@ -189,7 +196,7 @@ result={"set":name,"container":("assembly" if target is m.rootAssembly else "par
       },
       async execute(args, exec) {
         const model = JSON.stringify(String(args.model))
-        const part = args.part ? JSON.stringify(String(args.part)) : 'null'
+        const part = args.part ? JSON.stringify(String(args.part)) : 'None'
         const inst = JSON.stringify(String(args.instanceName || ''))
         const r = await runKernelCode(
           br,

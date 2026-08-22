@@ -38,10 +38,10 @@ export function registerInteraction(ctx: Context, config: { host: string; port: 
       },
       async execute(args, exec) {
         const model = JSON.stringify(String(args.model))
-        const name = args.name ? JSON.stringify(String(args.name)) : 'null'
+        const name = args.name ? JSON.stringify(String(args.name)) : 'None'
         const kind = String(args.kind).toLowerCase()
         if (!['contact', 'tie'].includes(kind)) throw new Error('kind must be contact|tie')
-        const step = args.step ? JSON.stringify(String(args.step)) : 'null'
+        const step = args.step ? JSON.stringify(String(args.step)) : 'None'
         const friction = Number(args.friction ?? 0.3)
         const parseSurf = (s: string) => {
           if (!s || !s.includes(':')) throw new Error('surface must be "[instance]:[surfaceSet]"')

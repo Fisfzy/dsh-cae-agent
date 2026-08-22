@@ -54,7 +54,6 @@ mat=m.Material(name=${name})
 def _ensure(o,k): 
     if k not in o: return {} 
     return o[k]
-add=mat.elastic
 el=_ensure(${JSON.stringify(props)},"elastic")
 if el:
     mat.Elastic(table=[[float(el.get("E",200000.0)), float(el.get("nu",0.3))]])
@@ -83,7 +82,7 @@ result={"model":${model},"name":mat.name,"materialExists":mat.name in m.material
     defineTool({
       name: 'abaqus_assign_section',
       description:
-        'Create a section referencing an existing material and assign it to a region of a part. Region is chosen by a named set on the part/assembly, or by bare geometric cell/face/edge indices (0-based). sectionType: solid|shell|beam. thickness only for shell.',
+        'Create a section referencing an existing material and assign it to a region of a part. Region is chosen by a named set on the part/assembly, or by bare geometric cell/face/edge indices (0-based). sectionType: solid|shell|beam (auto-selected from geometry when omitted: cells->solid, faces->shell). thickness only for shell.',
       parameters: {
         model: { type: 'string', required: true, description: 'Model name' },
         part: { type: 'string', required: true, description: 'Part name' },
@@ -110,39 +109,62 @@ result={"model":${model},"name":mat.name,"materialExists":mat.name in m.material
         const part = JSON.stringify(String(args.part))
         const mat = JSON.stringify(String(args.material))
         const secName = JSON.stringify(String(args.sectionName || `${args.part}-Section`))
-        const stype = String(args.sectionType || 'solid').toLowerCase()
-        if (!VALID_SECTION_TYPES.includes(stype)) throw new Error(`sectionType must be ${VALID_SECTION_TYPES.join('|')}`)
-        const region = args.region ? JSON.stringify(String(args.region)) : 'null'
+        // Auto-adapt section type to the part's geometry when not explicitly given:
+        // solid if the part has cells, otherwise shell if it has faces (this is
+        // the common failure mode: defaulting to "solid" on a shell/2D part).
+        const explicitType = args.sectionType ? String(args.sectionType).toLowerCase() : undefined
+        const region = args.region ? JSON.stringify(String(args.region)) : 'None'
+        const requestedType = JSON.stringify(explicitType || '').toLowerCase()
         const r = await runKernelCode(
           br,
           `from abaqus import mdb
-from abaqusConstants import SPECIFY_THICKNESS
+from abaqusConstants import UNIFORM
 m=mdb.models[${model}]
 p=m.parts[${part}]
-stype=${JSON.stringify(stype)}
+# choose the section type from geometry when not specified
+requested=${requestedType}
+if requested and requested not in ("solid","shell","beam"):
+    raise ValueError("sectionType must be solid|shell|beam")
+if not requested:
+    if len(p.cells) > 0:
+        stype="solid"
+    elif len(p.faces) > 0:
+        stype="shell"
+    else:
+        raise RuntimeError("cannot infer sectionType: part has neither cells nor faces; pass sectionType explicitly")
+else:
+    stype=requested
+if stype not in ("solid","shell","beam"):
+    raise ValueError("sectionType must be solid|shell|beam")
 secname=${secName}
 # create (replace) the section
 if secname in m.sections: del m.sections[secname]
 if stype=="solid":
     sec=m.HomogeneousSolidSection(name=secname, material=${mat})
 elif stype=="shell":
-    sec=m.HomogeneousShellSection(name=secname, material=${mat}, thicknessType=SPECIFY_THICKNESS, thickness=${Number(args.thickness ?? 1.0)})
+    sec=m.HomogeneousShellSection(name=secname, material=${mat}, thicknessType=UNIFORM, thickness=${Number(args.thickness ?? 1.0)})
 else:
     raise ValueError("beam section creation needs a profile; use abaqus_run_python")
 # select region
-if ${region !== null ? 'true' : 'false'}:
-    reg=p.sets[${region}]
+constrained_region=${region}   # JSON string name, or null when omitted
+regname=secname+"-AllCells" if stype=="solid" else secname+"-AllFaces"
+if constrained_region is not None:
+    reg=p.sets[constrained_region]
+    regname=constrained_region
 else:
     if stype=="solid" and len(p.cells):
         reg=p.Set(name=secname+"-AllCells", cells=p.cells)
+        regname=secname+"-AllCells"
     elif stype=="shell" and len(p.faces):
         reg=p.Set(name=secname+"-AllFaces", faces=p.faces)
+        regname=secname+"-AllFaces"
     elif len(p.edges):
         reg=p.Set(name=secname+"-AllEdges", edges=p.edges)
+        regname=secname+"-AllEdges"
     else:
         raise RuntimeError("No assignable region (cells/faces/edges) on part "+${part})
 p.SectionAssignment(region=reg, sectionName=secname)
-result={"model":${model},"part":${part},"section":secname,"material":${mat},"type":stype,"assignedRegion":reg.name}`,
+result={"model":${model},"part":${part},"section":secname,"material":${mat},"type":stype,"assignedRegion":regname}`,
           config.timeoutMs,
           exec.signal,
         )

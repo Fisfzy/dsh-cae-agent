@@ -96,9 +96,12 @@ plugin/
 cd plugin
 powershell -File scripts/link-deps.ps1     # 一次性：junction 运行时依赖(@deepseek-ai/cordis,dsh-tools,schemastery,dsh-attachment)
 npm run build                             # tsc -p tsconfig.json → lib/（含 .d.ts）
-npm test                                  # smoke + codegen + load（20 工具，真实 Cordis 加载）
+npm test                                  # smoke + codegen + load（21 工具，真实 Cordis 加载）
+npm run e2e                               # 真机回归：连 48152 桥跑关键工具（需 Abaqus 桥开着）
 npm run typecheck                         # tsc --noEmit
 ```
+
+**真机 e2e**（`test/e2e.mjs`）：连上正在运行的 Abaqus/CAE socket bridge（默认 127.0.0.1:48152），用插件协议驱动真实工具（只读 + create_part/create_set/instantiate/create_material/assign_section/define_step/apply_load/set_bc/generate_mesh），在临时测试模型里跑写工具，输出 PASS/FAIL。要求 Abaqus/CAE 已开桥。它会自动修整/发现模板缺陷——是插件"系统性自检"的关键。
 
 > 依赖说明：`@deepseek-ai/{cordis,dsh-tools,schemastery,dsh-attachment}` 是 restricted/私有包，外网不能直接 `npm i`；`scripts/link-deps.ps1` 从已安装的 DSH 发行包把它们 junction 进 `plugin/node_modules`，类型与运行时都能解析。
 

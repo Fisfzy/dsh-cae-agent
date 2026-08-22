@@ -105,6 +105,19 @@ npm test                                  # smoke + codegen（20 工具，Python
 
 **约束**：调起 Abaqus/CAE 需要**交互式桌面会话**（Abaqus GUI 内核初始化依赖图形上下文）；headless 下 `from abaqus import ...` 会挂起（非脚本问题，是 Abaqus 架构）。所以该工具的用户侧验证需在桌面会话里弹窗完成。
 
+## 2026-08-22 真机 e2e 暴露并修复的插件缺陷
+
+新增 `test/e2e.mjs`（连 48152 桥、驱动真实工具、临时测试模型跑写工具），一把抓出一批模板缺陷并全部修复：
+
+- **通用 null 注入 bug（影响 6 个工具）**：`JSON.stringify(null)` 会在 Python 模板里变成裸 `null`/`true`/`false`，触发 `NameError`。已在 `assign_section`/`apply_load`/`set_bc`/`define_step`/`create_interaction`/`instantiate`/`generate_mesh`/`create_set` 统一改为输出 Python `None` + `is not None` 判断。
+- **`create_part`**：移除死导入 `FOUR_NODE_TET`；`shape` 关键字在 Abaqus 2024 非法（去掉）；`type` 从字符串"DEFORMABLE"映射到枚举常量 `DEFORMABLE_BODY` 等；`part.MainSketch` 不存在 → 改用 `m.ConstrainedSketch` + `BaseSolidExtrude`。
+- **`create_material`**：移除死代码 `add=mat.elastic`（新材料访问会 AttributeError）。
+- **`define_step`**：`maxInc=1e5` ≥ `timePeriod` 被 Abaqus 拒绝 → 改为 `maxInc=timePeriod`。
+- **`assign_section`**：默认按几何自适应 solid/shell；shell 厚度 `SPECIFY_THICKNESS` → `UNIFORM`；`reg.name`（Set 无该属性）→ 返回集合名字符串。
+- **`generate_mesh`**：`from part import ElemType` 在当前内核不可导入（去掉显式 setElementType，用默认网格器）；独立实例模型自动改到装配实例上 `seedPartInstance`+`generateMesh`。
+
+e2e 现覆盖 13 项（只读 + create_part/create_set/instantiate/create_material/assign_section/define_step/apply_load/set_bc/generate_mesh + 复核），全绿。作为后续改动的回归兜底。
+
 ## License
 
 MIT。详见 `plugin/LICENSE` 与 `plugin/NOTICE`。

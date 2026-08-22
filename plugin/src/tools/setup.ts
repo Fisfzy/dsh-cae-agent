@@ -44,11 +44,11 @@ export function registerSetup(ctx: Context, config: { host: string; port: number
         const model = JSON.stringify(String(args.model))
         const type = String(args.type || 'static').toLowerCase()
         if (!VALID_STEP_TYPES.includes(type)) throw new Error(`type must be ${VALID_STEP_TYPES.join('|')}`)
-        const name = args.name ? JSON.stringify(String(args.name)) : 'null'
-        const prev = args.prevStepName ? JSON.stringify(String(args.prevStepName)) : 'null'
+        const name = args.name ? JSON.stringify(String(args.name)) : 'None'
+        const prev = args.prevStepName ? JSON.stringify(String(args.prevStepName)) : 'None'
         const tp = Number(args.timePeriod ?? 1.0)
         const nlgeom = args.nlgeom === true
-        const basedPy = prev !== 'null' ? prev : '("Initial" if len(m.steps)==1 else m.steps[m.steps.keys()[-1]].name)'
+        const basedPy = prev !== 'None' ? prev : '("Initial" if len(m.steps)==1 else m.steps[m.steps.keys()[-1]].name)'
         const r = await runKernelCode(
           br,
           `from abaqus import mdb
@@ -66,7 +66,7 @@ if stype=="modal":
     proc="linear perturbation (frequency)"
 else:
     nl=${nlgeom ? 'True' : 'False'}
-    s=m.StaticStep(name=name, previous=based, timePeriod=${tp}, initialInc=${Number(args.initialIncrement ?? 0.1)}, maxInc=1e5, minInc=1e-12, maxNumInc=${Number(args.maxIncrements ?? 100)}, nlgeom=nl)
+    s=m.StaticStep(name=name, previous=based, timePeriod=${tp}, initialInc=${Number(args.initialIncrement ?? 0.1)}, maxInc=${tp}, minInc=1e-12, maxNumInc=${Number(args.maxIncrements ?? 100)}, nlgeom=nl)
     proc="static, general" if stype=="static" else "dynamic, explicit/general"
 result={"model":${model},"step":s.name,"type":stype,"previous":based,"procedure":proc}`,
           config.timeoutMs,
@@ -103,13 +103,13 @@ result={"model":${model},"step":s.name,"type":stype,"previous":based,"procedure"
       },
       async execute(args, exec) {
         const model = JSON.stringify(String(args.model))
-        const name = args.name ? JSON.stringify(String(args.name)) : 'null'
-        const step = args.step ? JSON.stringify(String(args.step)) : 'null'
+        const name = args.name ? JSON.stringify(String(args.name)) : 'None'
+        const step = args.step ? JSON.stringify(String(args.step)) : 'None'
         const type = String(args.type).toLowerCase()
         if (!VALID_LOAD_TYPES.includes(type)) throw new Error(`type must be ${VALID_LOAD_TYPES.join('|')}`)
-        const region = args.region ? JSON.stringify(String(args.region)) : 'null'
-        const inst = args.instance ? JSON.stringify(String(args.instance)) : 'null'
-        const magnitude = JSON.stringify(args.magnitude ?? null)
+        const region = args.region ? JSON.stringify(String(args.region)) : 'None'
+        const inst = args.instance ? JSON.stringify(String(args.instance)) : 'None'
+        const magnitude = args.magnitude !== undefined && args.magnitude !== null ? JSON.stringify(args.magnitude) : 'None'
         const r = await runKernelCode(
           br,
           `from abaqus import mdb
@@ -192,8 +192,8 @@ result={"load":name,"step":stepname,"type":itype,"region":reg}`,
         if (!VALID_BC_TYPES.includes(btype)) throw new Error(`type must be ${VALID_BC_TYPES.join('|')}`)
         const step = args.step ? JSON.stringify(String(args.step)) : JSON.stringify('Initial')
         const region = JSON.stringify(String(args.region))
-        const inst = args.instance ? JSON.stringify(String(args.instance)) : 'null'
-        const name = args.name ? JSON.stringify(String(args.name)) : 'null'
+        const inst = args.instance ? JSON.stringify(String(args.instance)) : 'None'
+        const name = args.name ? JSON.stringify(String(args.name)) : 'None'
         const symUpper = JSON.stringify(String(args.symmetry || 'Z').toUpperCase())
         const r = await runKernelCode(
           br,
@@ -201,7 +201,8 @@ result={"load":name,"step":stepname,"type":itype,"region":reg}`,
 m=mdb.models[${model}]
 stepname=${step}
 if stepname not in m.steps: stepname="Initial"
-sel=m.rootAssembly.instances[${inst}].sets[${region}] if ${inst !== 'null' ? 'true' : 'false'} else m.rootAssembly.sets[${region}]
+inst_arg=${inst}
+sel = m.rootAssembly.instances[inst_arg].sets[${region}] if inst_arg is not None else m.rootAssembly.sets[${region}]
 bc=${name}
 if bc is None:
     i=1; cand="BC-"+str(i)
