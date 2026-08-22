@@ -1,64 +1,32 @@
-viewer/node_modules/
-viewer/dist/
-viewer/dist-verify/
-viewer/*.log
-.worktrees/
-models/**/*.lck
-models/**/*.sim
-models/**/*.023
-models/**/*.mdl
-models/**/*.pac
-models/**/*.stt
-models/**/*.sel
-models/**/*.abq
-models/**/*.res
-models/**/*.com
-models/**/*.dat
-models/**/*.msg
-models/**/*.log
-models/**/*.prt
-models/**/*.sta
-models/**/*.env
-models/**/*.rec
-models/**/abaqus.rpy*
-models/**/*.odb
-models/**/*.inp
-models/text-to-cae-milling-3d/result_mesh.json
-models/text-to-cae-cutting/
+# --- Node / plugin ---
+node_modules/
+plugin/node_modules/
+plugin/*.log
+*.log
+
+# --- Python caches (kept for safety if Abaqus helper scripts are added) ---
 **/__pycache__/
 *.pyc
-*.log
-.venv-pyaedt/
-.venv-pyaedt-codex/
-pyaedt_runs/
-MCP/**/.env
-MCP/**/.venv/
-MCP/**/.venv.broken-*/
-MCP/**/*.egg-info/
-MCP/**/aedt_projects/
-MCP/**/*.aedtresults/
-MCP/**/*.aedt.auto
-MCP/**/*.aedt.lock
-MCP/**/jobs/
-MCP/**/workbench_queue/
-MCP/**/*.wbpj
-MCP/**/*.wbpz
-MCP/**/*.rst
-MCP/**/*.db
-MCP/**/*.err
-MCP/**/*.out
-MCP/**/commands/
-MCP/**/results/
-MCP/**/scripts/
-!MCP/Ansys/AEDT MCP/scripts/
-!MCP/Ansys/AEDT MCP/scripts/**
-!MCP/FEP-Agent-Hub/scripts/
-!MCP/FEP-Agent-Hub/scripts/**
-MCP/**/screenshots/
-MCP/**/status.json
-MCP/**/status.json.tmp
-MCP/**/stop.flag
-MCP/**/mcp.log
+.venv/
+.venv-*/
 
-# dsh-cae-agent plugin local test deps
-plugin/node_modules/
+# --- Abaqus / CAE generated artifacts ---
+*.odb
+*.inp
+*.sta
+*.msg
+*.dat
+*.res
+*.com
+*.abq
+*.prt
+*.sim
+*.stt
+*.rec
+*.env
+abaqus.rpy*
+*.lck
+
+# --- Worktrees / editor ---
+.worktrees/
+.DS_Store

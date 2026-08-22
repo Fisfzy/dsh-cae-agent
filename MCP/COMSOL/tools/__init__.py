@@ -1,1 +1,0 @@
-"""COMSOL MCP helper modules."""

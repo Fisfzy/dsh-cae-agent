@@ -1,3 +1,0 @@
-display_name: CST Simulation Workflow
-short_description: Drive CST Studio Suite simulations through the CST MCP with defaults, validation, and reports.
-default_prompt: Use the CST simulation workflow skill to plan or run a CST electromagnetic simulation through the CST MCP. Resolve missing inputs, state defaults, use a copied working project, validate results, and report evidence files.

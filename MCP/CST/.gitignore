@@ -1,6 +1,0 @@
-.venv/
-__pycache__/
-*.py[cod]
-*.egg-info/
-.cst_runtime/
-vendor/cst-runtime-cli/.git/

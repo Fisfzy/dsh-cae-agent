@@ -1,6 +1,0 @@
-{
-  "quantities": [
-    {"name": "load", "quantity": "force", "value": [30, 0, 0], "unit": "kN", "to_unit": "N"},
-    {"name": "allowable", "quantity": "stress", "value": 235, "unit": "MPa", "to_unit": "Pa"}
-  ]
-}

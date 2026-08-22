@@ -1,2 +1,0 @@
-"""pvpython worker package."""
-

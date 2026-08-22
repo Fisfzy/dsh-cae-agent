@@ -1,4 +1,0 @@
-[mcp_servers.cst-studio-suite]
-command = "E:\\Code\\CAE-Agent-Hub\\MCP\\CST\\.venv\\Scripts\\python.exe"
-args = ["E:\\Code\\CAE-Agent-Hub\\MCP\\CST\\mcp_server.py"]
-env = { CST_INSTALL_ROOT = "G:\\Program Files\\CST Studio Suite 2026", CST_DESIGN_ENVIRONMENT_EXE = "G:\\Program Files\\CST Studio Suite 2026\\AMD64\\CST DESIGN ENVIRONMENT_AMD64.exe" }
