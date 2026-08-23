@@ -35,16 +35,18 @@ DSH(agent) ──原生工具──> dsh-cae-agent（本插件, TCP）──> Ab
 ## 仓库结构
 
 ```
-├── plugin/                 # DSH Cordis 插件包（源码 TS —— 纯 TypeScript）
-│   ├── src/                # ★ 源码（要改这里）
+├── plugin/                 # DSH Cordis 插件包（后端工具 + 客户端半边）
+│   ├── src/                # ★ 后端源码（要改这里）
 │   │   ├── index.ts        #   Cordis 入口: name/Config(Schemastery)/inject/apply
 │   │   ├── core.ts         #   socket-bridge 客户端 + runKernelCode（支持 exec.signal）
 │   │   └── tools/          #   read/geometry/material/setup/interaction/mesh/job/launch/composite
-│   ├── lib/                # 构建产物（tsc 从 src 编译输出 + .d.ts，勿手改）
+│   ├── client/             # ★ 客户端半边（better-sidebar 工作流 tab，dsh.client 挂载）
+│   │   └── src/            #   index.tsx + WorkflowView.tsx（Abaqus 建模链 + 操作逻辑）
+│   ├── lib/                # 构建产物（后端 tsc -> lib/index.js；客户端 tsdown -> lib/client.js，勿手改）
 │   ├── tsconfig.json       # NodeNext -> lib/
 │   ├── scripts/            # link-deps.ps1（junction 运行时依赖）
 │   ├── test/               # smoke/codegen/load（离线）+ e2e（真实桥回归）
-│   └── package.json        # build/test/e2e 脚本
+│   └── package.json        # build/test/e2e + dsh.bundle(服务端) + dsh.client(客户端)
 ├── docs/
 │   └── MIGRATION.md        # 迁移说明 + 真机测试记录
 ├── LICENSE
