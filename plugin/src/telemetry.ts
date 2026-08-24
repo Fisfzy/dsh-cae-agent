@@ -199,8 +199,12 @@ export function registerTelemetry(ctx: Context, config: { host: string; port: nu
   // loads with its tools intact. (A bare `ctx.get('webServer')` in `apply`
   // returns undefined because the plugin does not declare webServer in inject.)
   ctx.inject(['webServer'], (sctx) => {
-    const webServer = sctx.get('webServer') as CafeWebServer
-    const webRuntime = sctx.get('webRuntime') as CafeWebRuntime | undefined
+    // When a service is injected, it is exposed as a PROPERTY on the callback's
+    // context (sctx.webServer), not via sctx.get(name) — the same way BSB reads
+    // `sctx.settings`. Using sctx.get('webServer') here returned undefined, so
+    // the route silently never registered.
+    const webServer = (sctx as unknown as { webServer: CafeWebServer }).webServer
+    const webRuntime = (sctx as unknown as { webRuntime?: CafeWebRuntime }).webRuntime
     const trustedHosts = webRuntime?.trustedHosts ?? []
     const handle: BridgeHandle = { host: config.host, port: config.port }
     const timeout = config.timeoutMs || DEFAULT_TIMEOUT_MS

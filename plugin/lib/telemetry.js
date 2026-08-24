@@ -132,8 +132,12 @@ export function registerTelemetry(ctx, config) {
     // loads with its tools intact. (A bare `ctx.get('webServer')` in `apply`
     // returns undefined because the plugin does not declare webServer in inject.)
     ctx.inject(['webServer'], (sctx) => {
-        const webServer = sctx.get('webServer');
-        const webRuntime = sctx.get('webRuntime');
+        // When a service is injected, it is exposed as a PROPERTY on the callback's
+        // context (sctx.webServer), not via sctx.get(name) — the same way BSB reads
+        // `sctx.settings`. Using sctx.get('webServer') here returned undefined, so
+        // the route silently never registered.
+        const webServer = sctx.webServer;
+        const webRuntime = sctx.webRuntime;
         const trustedHosts = webRuntime?.trustedHosts ?? [];
         const handle = { host: config.host, port: config.port };
         const timeout = config.timeoutMs || DEFAULT_TIMEOUT_MS;
