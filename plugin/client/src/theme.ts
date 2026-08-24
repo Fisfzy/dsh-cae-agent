@@ -108,6 +108,35 @@ const CSS = `
 }
 .cae-root ::-webkit-scrollbar { width: 8px; height: 8px; }
 .cae-root ::-webkit-scrollbar-thumb { background: var(--cae-border); border-radius: 4px; }
+
+/* ── live progress stepper (Mac-style status rail) ─────────────────────── */
+.cae-step { display: flex; gap: 10px; align-items: stretch; }
+.cae-rail { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 18px; }
+.cae-dot {
+  width: 15px; height: 15px; border-radius: 999px;
+  border: 2px solid var(--cae-faint); background: var(--cae-card);
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; flex-shrink: 0; margin-top: 6px;
+}
+.cae-line { flex: 1; width: 2px; background: var(--cae-border); margin: 3px 0 0; min-height: 10px; }
+.cae-step:last-child .cae-line { display: none; }
+.cae-dot-done { background: var(--cae-ok); border-color: var(--cae-ok); }
+.cae-dot-error { background: var(--cae-err); border-color: var(--cae-err); }
+.cae-dot-active { background: var(--cae-accent); border-color: var(--cae-accent); animation: caePulse 1.6s ease-out infinite; }
+@keyframes caePulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--cae-accent) 45%, transparent); }
+  70%  { box-shadow: 0 0 0 8px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.cae-card-active {
+  border-color: var(--cae-accent) !important;
+  box-shadow: 0 0 0 1px var(--cae-accent-soft), var(--cae-shadow) !important;
+}
+.cae-card-error {
+  border-color: var(--cae-err) !important;
+  background: var(--cae-err-soft) !important;
+}
+.cae-card-done { border-left: 3px solid var(--cae-ok) !important; }
 `
 
 /** Inject the plugin stylesheet once. Idempotent — safe to call per mount. */

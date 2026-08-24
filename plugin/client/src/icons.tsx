@@ -44,3 +44,5 @@ export const IconFolder = ({ size }: IconProps) =>
 
 export const IconDot = ({ size }: IconProps) =>
   base('M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z', size)
+
+export const IconX = ({ size }: IconProps) => base('M4 4l8 8 M12 4l-8 8', size)

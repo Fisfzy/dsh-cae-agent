@@ -115,6 +115,35 @@ window.__ModuleLoader__.load({
 }
 .cae-root ::-webkit-scrollbar { width: 8px; height: 8px; }
 .cae-root ::-webkit-scrollbar-thumb { background: var(--cae-border); border-radius: 4px; }
+
+/* ── live progress stepper (Mac-style status rail) ─────────────────────── */
+.cae-step { display: flex; gap: 10px; align-items: stretch; }
+.cae-rail { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; width: 18px; }
+.cae-dot {
+  width: 15px; height: 15px; border-radius: 999px;
+  border: 2px solid var(--cae-faint); background: var(--cae-card);
+  display: inline-flex; align-items: center; justify-content: center;
+  color: #fff; flex-shrink: 0; margin-top: 6px;
+}
+.cae-line { flex: 1; width: 2px; background: var(--cae-border); margin: 3px 0 0; min-height: 10px; }
+.cae-step:last-child .cae-line { display: none; }
+.cae-dot-done { background: var(--cae-ok); border-color: var(--cae-ok); }
+.cae-dot-error { background: var(--cae-err); border-color: var(--cae-err); }
+.cae-dot-active { background: var(--cae-accent); border-color: var(--cae-accent); animation: caePulse 1.6s ease-out infinite; }
+@keyframes caePulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--cae-accent) 45%, transparent); }
+  70%  { box-shadow: 0 0 0 8px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.cae-card-active {
+  border-color: var(--cae-accent) !important;
+  box-shadow: 0 0 0 1px var(--cae-accent-soft), var(--cae-shadow) !important;
+}
+.cae-card-error {
+  border-color: var(--cae-err) !important;
+  background: var(--cae-err-soft) !important;
+}
+.cae-card-done { border-left: 3px solid var(--cae-ok) !important; }
 `;
 		/** Inject the plugin stylesheet once. Idempotent — safe to call per mount. */
 		function ensureCaeStyles() {
@@ -320,6 +349,43 @@ window.__ModuleLoader__.load({
 			return `按 Abaqus 建模链依次调用工具：\n${steps.map((s) => `${s.n}. ${s.goal}：${s.tools.join(" / ")}`).join("\n")}`;
 		}
 		//#endregion
+		//#region client/src/progress.ts
+		/** Parse the progress file; returns null when absent/invalid (→ guide mode). */
+		function parseProgress(text) {
+			if (!text) return null;
+			try {
+				const j = JSON.parse(text);
+				if (!j || !Array.isArray(j.steps)) return null;
+				const steps = j.steps.filter((s) => s && typeof s.n !== "undefined").map((s) => ({
+					n: String(s.n),
+					status: [
+						"pending",
+						"active",
+						"done",
+						"error"
+					].includes(s.status) ? s.status : "pending",
+					...typeof s.at === "string" ? { at: s.at } : {},
+					...typeof s.error === "string" ? { error: s.error } : {},
+					...typeof s.detail === "string" ? { detail: s.detail } : {}
+				}));
+				return {
+					...typeof j.sessionId === "string" ? { sessionId: j.sessionId } : {},
+					...typeof j.updatedAt === "string" ? { updatedAt: j.updatedAt } : {},
+					...typeof j.current === "string" ? { current: j.current } : {},
+					steps
+				};
+			} catch {
+				return null;
+			}
+		}
+		/** Index a progress file by step number for O(1) lookup. */
+		function nodeMap(f) {
+			const m = /* @__PURE__ */ new Map();
+			if (f) for (const s of f.steps) m.set(String(s.n), s);
+			return m;
+		}
+		const PROGRESS_FILENAME = "cae-progress.json";
+		//#endregion
 		//#region client/src/sidebarApi.ts
 		var SidebarApiError = class extends Error {
 			code;
@@ -357,6 +423,10 @@ window.__ModuleLoader__.load({
 		function fsTree(scope, path, signal) {
 			return call("fs.tree", scopePayload(scope, path !== void 0 && path !== "" ? { path } : {}), signal);
 		}
+		/** Read a text file under the session workspace (workspace-relative `path`). */
+		function fsRead(scope, path, signal) {
+			return call("fs.read", scopePayload(scope, { path }), signal);
+		}
 		//#endregion
 		//#region client/src/icons.tsx
 		function base(path, size = 14, extra) {
@@ -380,6 +450,7 @@ window.__ModuleLoader__.load({
 		const IconSearch = ({ size }) => base("M7 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10z M11 11l3.5 3.5", size);
 		const IconRefresh = ({ size }) => base("M13.5 8a5.5 5.5 0 1 1-1.6-3.9 M13.5 2v3h-3", size);
 		const IconFolder = ({ size }) => base("M2 4h4l1.5 1.5H14V13H2z", size);
+		const IconX = ({ size }) => base("M4 4l8 8 M12 4l-8 8", size);
 		//#endregion
 		//#region client/src/WorkspaceStatus.tsx
 		/**
@@ -724,16 +795,16 @@ window.__ModuleLoader__.load({
 		//#endregion
 		//#region client/src/WorkflowView.tsx
 		/**
-		* Abaqus 工作流 tab (feature ① + ④).
+		* Abaqus 工作流 tab — 实时进度步进器（Mac 风格状态灯）。
 		*
-		* Turns the static 11-step guide into an interactive workflow assistant:
-		*   - 分区 (前处理 / 求解 / 后处理)，每区可折叠
-		*   - 步骤卡片：编号徽标 + 目标 + 工具（点击复制）+ 备注 + 可展开进阶详情
-		*   - 顶部搜索框 + 模型类型过滤（实体/壳/复合/梁）高亮相关步
-		*   - 手动进度勾选（localStorage 按会话持久化）+ 进度条
-		*   - 「复制整条建模链 prompt」一键生成
-		*   - 顶部嵌入 WorkspaceStatus（② 工作目录侦测）
-		*   - 主题走 theme.ts 的 CSS 变量，暗/亮自适应
+		* 两种模式：
+		*   - 实时模式：会话工作目录里存在 `cae-progress.json`（agent 每跑一步就写）时，
+		*     轮询它并渲染 Mac 风格步进器 —— 待办灰灯 / 进行中蓝灯脉冲 + 卡片高亮 /
+		*     完成绿✓ / 出错红✕ + 卡片内联错误详情（"问题出在哪"）。
+		*   - 参考模式：无进度文件时退化为可交互指南（手动点状态灯标记完成 + 搜索 +
+		*     类型过滤 + 可展开的参数/示例/常见坑）。
+		*
+		* 零后端改动：进度文件是约定，agent 用任意文件工具写它即可（见 progress.ts）。
 		*/
 		function loadSet(key) {
 			try {
@@ -799,180 +870,270 @@ window.__ModuleLoader__.load({
 				})]
 			});
 		}
-		function StepCard({ step, done, dimmed, open, onToggleDone, onToggleOpen }) {
-			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+		/** Mac-style status dot. Live: shows authoritative status. Manual: click to toggle done. */
+		function StatusDot({ status, onClick, title }) {
+			const cls = status === "done" ? "cae-dot cae-dot-done" : status === "error" ? "cae-dot cae-dot-error" : status === "active" ? "cae-dot cae-dot-active" : "cae-dot";
+			const inner = status === "done" ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconCheck, { size: 9 }) : status === "error" ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconX, { size: 9 }) : null;
+			if (onClick) return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+				onClick,
+				title,
+				className: cls,
 				style: {
-					...card,
-					padding: "8px 10px",
-					marginBottom: 8,
-					opacity: dimmed ? .45 : 1,
-					transition: "opacity 0.15s",
-					borderLeft: done ? "3px solid var(--cae-ok)" : "3px solid transparent"
+					cursor: "pointer",
+					padding: 0
 				},
-				children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+				children: inner
+			});
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+				className: cls,
+				title,
+				children: inner
+			});
+		}
+		function StepCard({ step, status, live, error, errorDetail, dimmed, open, isLast, onToggleDone, onToggleOpen }) {
+			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+				className: "cae-step",
+				style: {
+					opacity: dimmed ? .45 : 1,
+					transition: "opacity 0.15s"
+				},
+				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+					className: "cae-rail",
+					children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(StatusDot, {
+						status,
+						onClick: live ? void 0 : onToggleDone,
+						title: live ? status === "active" ? "进行中" : status === "done" ? "已完成" : status === "error" ? "出错" : "待办" : status === "done" ? "已完成（点击取消）" : "标记此步已完成"
+					}), !isLast && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", { className: "cae-line" })]
+				}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+					className: `cae-card ${live ? status === "active" ? "cae-card-active" : status === "error" ? "cae-card-error" : status === "done" ? "cae-card-done" : "" : status === "done" ? "cae-card-done" : ""}`,
 					style: {
-						display: "flex",
-						alignItems: "flex-start",
-						gap: 8
+						...card,
+						flex: 1,
+						minWidth: 0,
+						padding: "8px 10px",
+						marginBottom: 8
 					},
-					children: [
-						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("input", {
-							type: "checkbox",
-							checked: done,
-							onChange: onToggleDone,
-							title: "标记此步已完成",
-							style: {
-								marginTop: 3,
-								accentColor: "var(--cae-ok)",
-								cursor: "pointer",
-								flexShrink: 0
-							}
-						}),
-						/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
-							style: {
-								flexShrink: 0,
-								minWidth: 20,
-								height: 20,
-								borderRadius: 999,
-								background: done ? "var(--cae-ok)" : "var(--cae-accent-soft)",
-								color: done ? "#fff" : "var(--cae-accent)",
-								fontSize: 11,
-								fontWeight: 700,
-								display: "inline-flex",
-								alignItems: "center",
-								justifyContent: "center"
-							},
-							children: step.n
-						}),
-						/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-							style: {
-								flex: 1,
-								minWidth: 0
-							},
-							children: [
-								/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-									style: {
-										display: "flex",
-										alignItems: "center",
-										gap: 6
-									},
-									children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+					children: /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+						style: {
+							display: "flex",
+							alignItems: "flex-start",
+							gap: 8
+						},
+						children: [
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								style: {
+									flexShrink: 0,
+									minWidth: 20,
+									height: 20,
+									borderRadius: 999,
+									background: status === "done" ? "var(--cae-ok)" : "var(--cae-accent-soft)",
+									color: status === "done" ? "#fff" : "var(--cae-accent)",
+									fontSize: 11,
+									fontWeight: 700,
+									display: "inline-flex",
+									alignItems: "center",
+									justifyContent: "center"
+								},
+								children: step.n
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+								style: {
+									flex: 1,
+									minWidth: 0
+								},
+								children: [
+									/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 										style: {
-											fontWeight: 600,
-											fontSize: 13,
-											textDecoration: done ? "line-through" : "none",
-											color: done ? "var(--cae-muted)" : "var(--cae-fg)"
+											display: "flex",
+											alignItems: "center",
+											gap: 6
 										},
-										children: step.goal
-									}), step.kinds !== "any" && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+										children: [
+											/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+												style: {
+													fontWeight: 600,
+													fontSize: 13,
+													textDecoration: status === "done" && !live ? "line-through" : "none",
+													color: status === "done" && !live ? "var(--cae-muted)" : "var(--cae-fg)"
+												},
+												children: step.goal
+											}),
+											live && status === "active" && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+												style: {
+													fontSize: 10,
+													fontWeight: 700,
+													color: "var(--cae-accent)",
+													background: "var(--cae-accent-soft)",
+													padding: "0 6px",
+													borderRadius: 999
+												},
+												children: "进行中"
+											}),
+											step.kinds !== "any" && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+												style: {
+													fontSize: 10,
+													color: "var(--cae-faint)",
+													flexShrink: 0
+												},
+												children: step.kinds.map((k) => KIND_LABEL[k]).join("/")
+											})
+										]
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 										style: {
-											fontSize: 10,
-											color: "var(--cae-faint)",
-											flexShrink: 0
+											display: "flex",
+											flexWrap: "wrap",
+											gap: 4,
+											margin: "5px 0"
 										},
-										children: step.kinds.map((k) => KIND_LABEL[k]).join("/")
-									})]
-								}),
-								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-									style: {
-										display: "flex",
-										flexWrap: "wrap",
-										gap: 4,
-										margin: "5px 0"
-									},
-									children: step.tools.map((t) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)(ToolChip, { tool: t }, t))
-								}),
-								/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-									style: {
-										fontSize: 11.5,
-										color: "var(--cae-muted)"
-									},
-									children: step.note
-								}),
-								open && step.detail && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
-									style: {
-										marginTop: 8,
-										padding: "8px 10px",
-										background: "var(--cae-inset)",
-										borderRadius: "var(--cae-radius-sm)",
-										fontSize: 11.5,
-										display: "grid",
-										gap: 6
-									},
-									children: [
-										step.detail.params && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+										children: step.tools.map((t) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)(ToolChip, { tool: t }, t))
+									}),
+									/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+										style: {
+											fontSize: 11.5,
+											color: "var(--cae-muted)"
+										},
+										children: step.note
+									}),
+									status === "error" && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+										style: {
+											marginTop: 8,
+											padding: "8px 10px",
+											background: "var(--cae-err-soft)",
+											border: "1px solid color-mix(in srgb, var(--cae-err) 40%, transparent)",
+											borderRadius: "var(--cae-radius-sm)",
+											fontSize: 11.5
+										},
+										children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 											style: {
-												fontWeight: 600,
-												color: "var(--cae-fg)",
-												marginBottom: 2
+												display: "flex",
+												alignItems: "center",
+												gap: 5,
+												fontWeight: 700,
+												color: "var(--cae-err)"
 											},
-											children: "常用参数"
-										}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+											children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconX, { size: 12 }), error ?? "此步骤出错"]
+										}), errorDetail && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 											style: {
-												fontFamily: "var(--cae-mono)",
-												fontSize: 11,
+												marginTop: 4,
 												color: "var(--cae-muted)",
 												whiteSpace: "pre-wrap"
 											},
-											children: step.detail.params
-										})] }),
-										step.detail.example && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-											style: {
-												fontWeight: 600,
-												color: "var(--cae-fg)",
-												marginBottom: 2
-											},
-											children: "示例"
-										}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-											style: {
-												fontFamily: "var(--cae-mono)",
-												fontSize: 11,
-												color: "var(--cae-accent)",
-												whiteSpace: "pre-wrap"
-											},
-											children: step.detail.example
-										})] }),
-										step.detail.pitfall && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-											style: {
-												fontWeight: 600,
-												color: "var(--cae-warn)",
-												marginBottom: 2
-											},
-											children: "常见坑"
-										}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-											style: { color: "var(--cae-muted)" },
-											children: step.detail.pitfall
-										})] })
-									]
-								})
-							]
-						}),
-						step.detail && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
-							onClick: onToggleOpen,
-							title: open ? "收起详情" : "展开详情",
-							style: {
-								flexShrink: 0,
-								border: "none",
-								background: "transparent",
-								color: "var(--cae-faint)",
-								display: "inline-flex",
-								padding: 2,
-								transform: open ? "rotate(90deg)" : "none",
-								transition: "transform 0.15s"
-							},
-							children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconChevron, { size: 14 })
-						})
-					]
-				})
+											children: errorDetail
+										})]
+									}),
+									open && step.detail && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+										style: {
+											marginTop: 8,
+											padding: "8px 10px",
+											background: "var(--cae-inset)",
+											borderRadius: "var(--cae-radius-sm)",
+											fontSize: 11.5,
+											display: "grid",
+											gap: 6
+										},
+										children: [
+											step.detail.params && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+												style: {
+													fontWeight: 600,
+													color: "var(--cae-fg)",
+													marginBottom: 2
+												},
+												children: "常用参数"
+											}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+												style: {
+													fontFamily: "var(--cae-mono)",
+													fontSize: 11,
+													color: "var(--cae-muted)",
+													whiteSpace: "pre-wrap"
+												},
+												children: step.detail.params
+											})] }),
+											step.detail.example && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+												style: {
+													fontWeight: 600,
+													color: "var(--cae-fg)",
+													marginBottom: 2
+												},
+												children: "示例"
+											}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+												style: {
+													fontFamily: "var(--cae-mono)",
+													fontSize: 11,
+													color: "var(--cae-accent)",
+													whiteSpace: "pre-wrap"
+												},
+												children: step.detail.example
+											})] }),
+											step.detail.pitfall && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+												style: {
+													fontWeight: 600,
+													color: "var(--cae-warn)",
+													marginBottom: 2
+												},
+												children: "常见坑"
+											}), /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+												style: { color: "var(--cae-muted)" },
+												children: step.detail.pitfall
+											})] })
+										]
+									})
+								]
+							}),
+							step.detail && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+								onClick: onToggleOpen,
+								title: open ? "收起详情" : "展开详情",
+								style: {
+									flexShrink: 0,
+									border: "none",
+									background: "transparent",
+									color: "var(--cae-faint)",
+									display: "inline-flex",
+									padding: 2,
+									transform: open ? "rotate(90deg)" : "none",
+									transition: "transform 0.15s"
+								},
+								children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(IconChevron, { size: 14 })
+							})
+						]
+					})
+				})]
 			});
 		}
 		function WorkflowView(props) {
 			ensureCaeStyles();
 			const { scope, visible } = props;
 			const progressKey = `cae:progress:${scope.sessionId}`;
+			const [progress, setProgress] = (0, react.useState)(null);
+			const liveSeq = (0, react.useRef)(0);
+			(0, react.useEffect)(() => {
+				if (!visible) return;
+				let alive = true;
+				const my = ++liveSeq.current;
+				const ctrl = new AbortController();
+				const tick = async () => {
+					try {
+						const res = await fsRead(scope, PROGRESS_FILENAME, ctrl.signal);
+						if (!alive || my !== liveSeq.current) return;
+						setProgress(res.kind === "text" ? parseProgress(res.content) : null);
+					} catch {
+						if (!alive || my !== liveSeq.current) return;
+						setProgress(null);
+					}
+				};
+				tick();
+				const t = setInterval(tick, 1500);
+				return () => {
+					alive = false;
+					ctrl.abort();
+					clearInterval(t);
+				};
+			}, [scope, visible]);
+			const live = progress !== null;
+			const nodes = (0, react.useMemo)(() => nodeMap(progress), [progress]);
+			const [done, setDone] = (0, react.useState)(() => loadSet(progressKey));
 			const [query, setQuery] = (0, react.useState)("");
 			const [kind, setKind] = (0, react.useState)("any");
-			const [done, setDone] = (0, react.useState)(() => loadSet(progressKey));
 			const [openSteps, setOpenSteps] = (0, react.useState)(/* @__PURE__ */ new Set());
 			const [collapsed, setCollapsed] = (0, react.useState)(/* @__PURE__ */ new Set());
 			const [copiedChain, setCopiedChain] = (0, react.useState)(false);
@@ -1005,17 +1166,22 @@ window.__ModuleLoader__.load({
 				});
 			}, []);
 			const matches = (0, react.useCallback)((s) => {
-				if (query) {
-					const q = query.toLowerCase();
-					if (!`${s.goal} ${s.tools.join(" ")} ${s.note}`.toLowerCase().includes(q)) return false;
-				}
-				return true;
+				if (!query) return true;
+				const q = query.toLowerCase();
+				return `${s.goal} ${s.tools.join(" ")} ${s.note}`.toLowerCase().includes(q);
 			}, [query]);
 			const dimmed = (0, react.useCallback)((s) => {
-				if (kind === "any") return false;
-				if (s.kinds === "any") return false;
+				if (kind === "any" || s.kinds === "any") return false;
 				return !s.kinds.includes(kind);
 			}, [kind]);
+			const statusOf = (0, react.useCallback)((s) => {
+				if (live) return nodes.get(s.n)?.status ?? "pending";
+				return done.has(s.n) ? "done" : "pending";
+			}, [
+				live,
+				nodes,
+				done
+			]);
 			const visibleBySection = (0, react.useMemo)(() => {
 				const map = {
 					pre: [],
@@ -1025,8 +1191,9 @@ window.__ModuleLoader__.load({
 				for (const s of STEPS) if (matches(s)) map[s.section].push(s);
 				return map;
 			}, [matches]);
-			const doneCount = done.size;
+			const doneCount = live ? STEPS.filter((s) => (nodes.get(s.n)?.status ?? "pending") === "done").length : done.size;
 			const total = STEPS.length;
+			const currentNode = live && progress.current ? nodes.get(progress.current) : void 0;
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 				className: "cae-root",
 				style: {
@@ -1038,12 +1205,38 @@ window.__ModuleLoader__.load({
 				children: [
 					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 						style: { marginBottom: 10 },
-						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+						children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 							style: {
-								fontWeight: 700,
-								fontSize: 14
+								display: "flex",
+								alignItems: "center",
+								gap: 8
 							},
-							children: "dsh-cae-agent · Abaqus 工作流"
+							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+								style: {
+									fontWeight: 700,
+									fontSize: 14
+								},
+								children: "dsh-cae-agent · Abaqus 工作流"
+							}), live && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
+								style: {
+									fontSize: 10,
+									fontWeight: 700,
+									color: "var(--cae-ok)",
+									background: "var(--cae-ok-soft)",
+									padding: "1px 8px",
+									borderRadius: 999,
+									display: "inline-flex",
+									alignItems: "center",
+									gap: 4
+								},
+								children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { style: {
+									width: 6,
+									height: 6,
+									borderRadius: 999,
+									background: "var(--cae-ok)",
+									display: "inline-block"
+								} }), "实时进度"]
+							})]
 						}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 							style: {
 								color: "var(--cae-muted)",
@@ -1054,13 +1247,38 @@ window.__ModuleLoader__.load({
 							children: [
 								"会话 ",
 								scope.sessionId,
-								" · 按建模链调用对应工具"
+								" · ",
+								live ? "跟随 agent 的 Abaqus 操作实时更新" : "按建模链调用对应工具"
 							]
 						})]
 					}),
 					/* @__PURE__ */ (0, react_jsx_runtime.jsx)(WorkspaceStatus, {
 						scope,
 						visible
+					}),
+					live && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+						style: {
+							...card,
+							padding: "8px 12px",
+							marginBottom: 12,
+							display: "flex",
+							alignItems: "center",
+							gap: 8,
+							fontSize: 11.5
+						},
+						children: [currentNode ? /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+							className: "cae-dot cae-dot-active",
+							style: { marginTop: 0 }
+						}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: ["正在执行：", /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("b", { children: ["步骤 ", progress.current] })] })] }) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+							style: { color: "var(--cae-muted)" },
+							children: "实时进度已连接（无进行中步骤）"
+						}), progress.updatedAt && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+							style: {
+								marginLeft: "auto",
+								color: "var(--cae-faint)"
+							},
+							children: new Date(progress.updatedAt).toLocaleTimeString()
+						})]
 					}),
 					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 						style: {
@@ -1148,7 +1366,7 @@ window.__ModuleLoader__.load({
 								color: "var(--cae-muted)",
 								marginBottom: 4
 							},
-							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: "建模进度（手动勾选）" }), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: [
+							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { children: live ? "实时进度" : "建模进度（点击状态灯标记）" }), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", { children: [
 								doneCount,
 								"/",
 								total
@@ -1171,7 +1389,7 @@ window.__ModuleLoader__.load({
 					SECTIONS.map((sec) => {
 						const steps = visibleBySection[sec.key];
 						const isCollapsed = collapsed.has(sec.key);
-						const secDone = steps.filter((s) => done.has(s.n)).length;
+						const secDone = steps.filter((s) => statusOf(s) === "done").length;
 						return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 							style: { marginBottom: 14 },
 							children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
@@ -1229,17 +1447,21 @@ window.__ModuleLoader__.load({
 									margin: "0 0 4px 21px"
 								},
 								children: "无匹配步骤"
-							}) : steps.map((s) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
-								style: { marginLeft: 21 },
-								children: /* @__PURE__ */ (0, react_jsx_runtime.jsx)(StepCard, {
+							}) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+								style: { marginLeft: 8 },
+								children: steps.map((s, i) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)(StepCard, {
 									step: s,
-									done: done.has(s.n),
+									status: statusOf(s),
+									live,
+									error: nodes.get(s.n)?.error,
+									errorDetail: nodes.get(s.n)?.detail,
 									dimmed: dimmed(s),
 									open: openSteps.has(s.n),
+									isLast: i === steps.length - 1,
 									onToggleDone: () => toggleDone(s.n),
 									onToggleOpen: () => toggleOpen(s.n)
-								})
-							}, s.n))] })]
+								}, s.n))
+							})] })]
 						}, sec.key);
 					})
 				]

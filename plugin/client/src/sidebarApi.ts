@@ -24,6 +24,18 @@ export interface FsTreeResult {
   truncated: boolean
 }
 
+export interface FsTextResult {
+  kind: 'text'
+  content: string
+  truncated: boolean
+}
+export interface FsBinaryResult {
+  kind: 'binary'
+  size: number
+  truncated: boolean
+  head: string
+}
+
 export interface SessionScope {
   sessionId: string
   cwd?: string
@@ -72,6 +84,11 @@ function scopePayload(scope: SessionScope, extra: Record<string, unknown>): Reco
 /** List a directory under the session workspace. Omit `path` to list the session cwd itself. */
 export function fsTree(scope: SessionScope, path?: string, signal?: AbortSignal): Promise<FsTreeResult> {
   return call<FsTreeResult>('fs.tree', scopePayload(scope, path !== undefined && path !== '' ? { path } : {}), signal)
+}
+
+/** Read a text file under the session workspace (workspace-relative `path`). */
+export function fsRead(scope: SessionScope, path: string, signal?: AbortSignal): Promise<FsTextResult | FsBinaryResult> {
+  return call<FsTextResult | FsBinaryResult>('fs.read', scopePayload(scope, { path }), signal)
 }
 
 /** Resolve the session's working directory (cwd) from the host. */
