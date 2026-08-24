@@ -1,6 +1,6 @@
 {
   "name": "dsh-cae-agent",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "DSH (DeepSeek Harness) Cordis plugin that operates a live Abaqus/CAE session through its local socket bridge. Native abaqus_* tools (Tier-1 read / Tier-2 controlled write / Tier-3 run_python fallback). Written in TypeScript per the dsh-plugin-dev standard.",
   "type": "module",
   "main": "lib/index.js",
