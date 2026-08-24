@@ -16,7 +16,7 @@ import type { TabComponentProps } from 'dsh-better-sidebar'
 import { ensureCaeStyles } from './theme.js'
 import { STEPS, SECTIONS, KIND_LABEL, chainPrompt, type Step, type SectionKey, type ModelKind } from './steps.js'
 import { parseProgress, nodeMap, PROGRESS_FILENAME, type ProgressFile, type NodeStatus } from './progress.js'
-import { fsRead } from './sidebarApi.js'
+import { fsRead, caeModelInfo, type CaeModelInfo } from './sidebarApi.js'
 import { WorkspaceStatus } from './WorkspaceStatus.js'
 import { copyText } from './copy.js'
 import { IconCopy, IconCheck, IconChevron, IconSearch, IconX } from './icons.js'
@@ -55,6 +55,78 @@ const chipBase: CSSProperties = {
   background: 'var(--cae-card)',
   color: 'var(--cae-muted)',
   cursor: 'pointer',
+}
+
+// ── map a workflow step to the REAL objects present in the live CAE session ──
+// Aggregated across every model in the session. Returns null when the bridge is
+// down or there is no live session (so the card just shows the static guide).
+function realStateOf(step: Step, info: CaeModelInfo | null): { label: string; items: string[] } | null {
+  if (!info || !info.connected) return null
+  const models = info.models ?? {}
+  const names = Object.keys(models)
+  const multi = names.length > 1
+
+  // Collect a facet across all models, dedup, tag with model name when >1 model.
+  const facet = (pick: (m: (typeof models)[string]) => string[] | undefined): string[] => {
+    const seen = new Set<string>()
+    const out: string[] = []
+    for (const m of names) {
+      for (const item of pick(models[m]) ?? []) {
+        if (seen.has(item)) continue
+        seen.add(item)
+        out.push(multi ? `${m}/${item}` : item)
+      }
+    }
+    return out
+  }
+  const allSteps = facet((m) => m.steps)
+
+  switch (step.n) {
+    case '1': // 拉起会话 —— 显示当前打开的模型清单
+      return names.length
+        ? { label: '当前 CAE 会话的模型', items: names.map((m) => (multi ? m : m)) }
+        : null
+    case '2': // 几何 —— parts + instances
+      return joinReal('几何对象', [...facet((m) => m.parts), ...facet((m) => m.instances)])
+    case '3': // 材料
+      return joinReal('已定义材料', facet((m) => m.materials))
+    case '4': // 截面
+      return joinReal('已定义截面', facet((m) => m.sections))
+    case '5': // 网格（无直接 facet，用 parts + instances 反映可划分的对象）
+      return joinReal('网格对象（装配实例）', [...facet((m) => m.instances), ...facet((m) => m.parts)])
+    case '6': // 分析步
+      return joinReal('已建分析步', allSteps)
+    case '7': { // 载荷 / 边界
+      const items = [...facet((m) => m.loads), ...facet((m) => m.bc), ...facet((m) => m.amplitudes)]
+      return joinReal('载荷 / 边界 / 幅值', items)
+    }
+    case '8': { // 接触 / 输出
+      const items = [...facet((m) => m.interactions), ...facet((m) => m.constraints)]
+      return joinReal('接触 / 约束', items)
+    }
+    case '9': { // 求解 —— 真实 job 及其状态
+      const jobs = info.jobs ?? []
+      return jobs.length
+        ? { label: '作业（实时状态）', items: jobs.map((j) => `${j.name}${j.status ? ` · ${j.status}` : ''}`) }
+        : null
+    }
+    case '10': { // 后处理 —— 完成的 job + 模型
+      const done = (info.jobs ?? []).filter((j) => /completed|finished|done/i.test(j.status ?? ''))
+      const items = [...done.map((j) => j.name), ...(names.length ? [`模型 ${names.length} 个`] : [])]
+      return joinReal('可后处理的结果', items)
+    }
+    case '11': // 兜底 —— 会话环境概览
+      return joinReal('会话环境', [
+        info.cwd ?? '',
+        ...(names.length ? [`模型 ${names.length} 个`] : []),
+      ])
+    default:
+      return null
+  }
+}
+
+function joinReal(label: string, items: string[]): { label: string; items: string[] } | null {
+  return items.length ? { label, items } : null
 }
 
 function ToolChip({ tool }: { tool: string }) {
@@ -114,6 +186,7 @@ function StepCard({
   live,
   error,
   errorDetail,
+  real,
   dimmed,
   open,
   isLast,
@@ -125,6 +198,7 @@ function StepCard({
   live: boolean
   error?: string
   errorDetail?: string
+  real?: { label: string; items: string[] } | null
   dimmed: boolean
   open: boolean
   isLast: boolean
@@ -206,6 +280,33 @@ function StepCard({
               ))}
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--cae-muted)' }}>{step.note}</div>
+
+            {/* 真实会话状态 —— 从桥注入，反映当前 Abaqus 里实际有什么 */}
+            {real && (
+              <div
+                style={{
+                  marginTop: 6,
+                  padding: '6px 8px',
+                  borderRadius: 'var(--cae-radius-sm)',
+                  border: '1px dashed color-mix(in srgb, var(--cae-accent) 45%, transparent)',
+                  background: 'color-mix(in srgb, var(--cae-accent-soft) 55%, transparent)',
+                  fontSize: 11,
+                }}
+              >
+                <div style={{ fontWeight: 700, color: 'var(--cae-accent)', marginBottom: 3, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ width: 5, height: 5, borderRadius: 999, background: 'var(--cae-accent)', display: 'inline-block' }} />
+                  {real.label}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 12px', color: 'var(--cae-fg)' }}>
+                  {real.items.map((it, i) => (
+                    <span key={i} style={{ fontFamily: 'var(--cae-mono)', fontSize: 10.5, color: 'var(--cae-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 220 }}>
+                      {it}
+                    </span>
+                  ))}
+                  {real.items.length === 0 && <span style={{ color: 'var(--cae-faint)', fontSize: 10.5 }}>（无）</span>}
+                </div>
+              </div>
+            )}
 
             {/* 出错详情 —— "问题出在哪" */}
             {status === 'error' && (
@@ -310,6 +411,33 @@ export function WorkflowView(props: TabComponentProps) {
 
   const live = progress !== null
   const nodes = useMemo(() => nodeMap(progress), [progress])
+
+  // ── live session snapshot polling (real objects → per-step cards) ────────
+  const [info, setInfo] = useState<CaeModelInfo | null>(null)
+  const infoSeq = useRef(0)
+  useEffect(() => {
+    if (!visible) return
+    let alive = true
+    const my = ++infoSeq.current
+    const ctrl = new AbortController()
+    const tick = async () => {
+      try {
+        const res = await caeModelInfo(ctrl.signal)
+        if (!alive || my !== infoSeq.current) return
+        setInfo(res)
+      } catch {
+        if (!alive || my !== infoSeq.current) return
+        setInfo(null)
+      }
+    }
+    void tick()
+    const t = setInterval(tick, 4000)
+    return () => {
+      alive = false
+      ctrl.abort()
+      clearInterval(t)
+    }
+  }, [visible])
 
   // ── guide-mode manual state ──────────────────────────────────────────────
   const [done, setDone] = useState<Set<string>>(() => loadSet(progressKey))
@@ -523,6 +651,7 @@ export function WorkflowView(props: TabComponentProps) {
                         live={live}
                         error={nodes.get(s.n)?.error}
                         errorDetail={nodes.get(s.n)?.detail}
+                        real={realStateOf(s, info)}
                         dimmed={dimmed(s)}
                         open={openSteps.has(s.n)}
                         isLast={i === steps.length - 1}

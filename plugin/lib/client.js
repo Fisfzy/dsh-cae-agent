@@ -432,6 +432,10 @@ window.__ModuleLoader__.load({
 		function caeTelemetry(signal) {
 			return call("telemetry", {}, signal, "/cae/api");
 		}
+		/** Snapshot the live Abaqus session (per-model facets, jobs, cwd) via the plugin route. */
+		function caeModelInfo(signal) {
+			return call("modelinfo", {}, signal, "/cae/api");
+		}
 		//#endregion
 		//#region client/src/icons.tsx
 		function base(path, size = 14, extra) {
@@ -967,6 +971,56 @@ window.__ModuleLoader__.load({
 			color: "var(--cae-muted)",
 			cursor: "pointer"
 		};
+		function realStateOf(step, info) {
+			if (!info || !info.connected) return null;
+			const models = info.models ?? {};
+			const names = Object.keys(models);
+			const multi = names.length > 1;
+			const facet = (pick) => {
+				const seen = /* @__PURE__ */ new Set();
+				const out = [];
+				for (const m of names) for (const item of pick(models[m]) ?? []) {
+					if (seen.has(item)) continue;
+					seen.add(item);
+					out.push(multi ? `${m}/${item}` : item);
+				}
+				return out;
+			};
+			const allSteps = facet((m) => m.steps);
+			switch (step.n) {
+				case "1": return names.length ? {
+					label: "当前 CAE 会话的模型",
+					items: names.map((m) => multi ? m : m)
+				} : null;
+				case "2": return joinReal("几何对象", [...facet((m) => m.parts), ...facet((m) => m.instances)]);
+				case "3": return joinReal("已定义材料", facet((m) => m.materials));
+				case "4": return joinReal("已定义截面", facet((m) => m.sections));
+				case "5": return joinReal("网格对象（装配实例）", [...facet((m) => m.instances), ...facet((m) => m.parts)]);
+				case "6": return joinReal("已建分析步", allSteps);
+				case "7": return joinReal("载荷 / 边界 / 幅值", [
+					...facet((m) => m.loads),
+					...facet((m) => m.bc),
+					...facet((m) => m.amplitudes)
+				]);
+				case "8": return joinReal("接触 / 约束", [...facet((m) => m.interactions), ...facet((m) => m.constraints)]);
+				case "9": {
+					const jobs = info.jobs ?? [];
+					return jobs.length ? {
+						label: "作业（实时状态）",
+						items: jobs.map((j) => `${j.name}${j.status ? ` · ${j.status}` : ""}`)
+					} : null;
+				}
+				case "10": return joinReal("可后处理的结果", [...(info.jobs ?? []).filter((j) => /completed|finished|done/i.test(j.status ?? "")).map((j) => j.name), ...names.length ? [`模型 ${names.length} 个`] : []]);
+				case "11": return joinReal("会话环境", [info.cwd ?? "", ...names.length ? [`模型 ${names.length} 个`] : []]);
+				default: return null;
+			}
+		}
+		function joinReal(label, items) {
+			return items.length ? {
+				label,
+				items
+			} : null;
+		}
 		function ToolChip({ tool }) {
 			const [copied, setCopied] = (0, react.useState)(false);
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
@@ -1021,7 +1075,7 @@ window.__ModuleLoader__.load({
 				children: inner
 			});
 		}
-		function StepCard({ step, status, live, error, errorDetail, dimmed, open, isLast, onToggleDone, onToggleOpen }) {
+		function StepCard({ step, status, live, error, errorDetail, real, dimmed, open, isLast, onToggleDone, onToggleOpen }) {
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 				className: "cae-step",
 				style: {
@@ -1125,6 +1179,58 @@ window.__ModuleLoader__.load({
 											color: "var(--cae-muted)"
 										},
 										children: step.note
+									}),
+									real && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+										style: {
+											marginTop: 6,
+											padding: "6px 8px",
+											borderRadius: "var(--cae-radius-sm)",
+											border: "1px dashed color-mix(in srgb, var(--cae-accent) 45%, transparent)",
+											background: "color-mix(in srgb, var(--cae-accent-soft) 55%, transparent)",
+											fontSize: 11
+										},
+										children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+											style: {
+												fontWeight: 700,
+												color: "var(--cae-accent)",
+												marginBottom: 3,
+												display: "flex",
+												alignItems: "center",
+												gap: 4
+											},
+											children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { style: {
+												width: 5,
+												height: 5,
+												borderRadius: 999,
+												background: "var(--cae-accent)",
+												display: "inline-block"
+											} }), real.label]
+										}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
+											style: {
+												display: "flex",
+												flexWrap: "wrap",
+												gap: "2px 12px",
+												color: "var(--cae-fg)"
+											},
+											children: [real.items.map((it, i) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+												style: {
+													fontFamily: "var(--cae-mono)",
+													fontSize: 10.5,
+													color: "var(--cae-muted)",
+													whiteSpace: "nowrap",
+													overflow: "hidden",
+													textOverflow: "ellipsis",
+													maxWidth: 220
+												},
+												children: it
+											}, i)), real.items.length === 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+												style: {
+													color: "var(--cae-faint)",
+													fontSize: 10.5
+												},
+												children: "（无）"
+											})]
+										})]
 									}),
 									status === "error" && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 										style: {
@@ -1262,6 +1368,31 @@ window.__ModuleLoader__.load({
 			}, [scope, visible]);
 			const live = progress !== null;
 			const nodes = (0, react.useMemo)(() => nodeMap(progress), [progress]);
+			const [info, setInfo] = (0, react.useState)(null);
+			const infoSeq = (0, react.useRef)(0);
+			(0, react.useEffect)(() => {
+				if (!visible) return;
+				let alive = true;
+				const my = ++infoSeq.current;
+				const ctrl = new AbortController();
+				const tick = async () => {
+					try {
+						const res = await caeModelInfo(ctrl.signal);
+						if (!alive || my !== infoSeq.current) return;
+						setInfo(res);
+					} catch {
+						if (!alive || my !== infoSeq.current) return;
+						setInfo(null);
+					}
+				};
+				tick();
+				const t = setInterval(tick, 4e3);
+				return () => {
+					alive = false;
+					ctrl.abort();
+					clearInterval(t);
+				};
+			}, [visible]);
 			const [done, setDone] = (0, react.useState)(() => loadSet(progressKey));
 			const [query, setQuery] = (0, react.useState)("");
 			const [kind, setKind] = (0, react.useState)("any");
@@ -1586,6 +1717,7 @@ window.__ModuleLoader__.load({
 									live,
 									error: nodes.get(s.n)?.error,
 									errorDetail: nodes.get(s.n)?.detail,
+									real: realStateOf(s, info),
 									dimmed: dimmed(s),
 									open: openSteps.has(s.n),
 									isLast: i === steps.length - 1,

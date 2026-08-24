@@ -22,7 +22,8 @@
  * mutates the model or submits work.
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { bridgeRequest, type BridgeHandle, DEFAULT_TIMEOUT_MS } from './core.js'
+import { bridgeRequest, runKernelCode, type BridgeHandle, DEFAULT_TIMEOUT_MS } from './core.js'
+import { SESSION_STATE_KERNEL } from './kernels.js'
 
 /** Minimal structural request face (subset of node IncomingMessage). */
 interface CafeHttpRequest {
@@ -173,6 +174,20 @@ async function pingTelemetry(handle: BridgeHandle, timeoutMs: number): Promise<u
   }
 }
 
+/** Snapshot the live CAE session (models facets + jobs + cwd) via the kernel.
+ *  Bridge-down is a normal `{connected:false}` value, not a thrown error. */
+async function modelInfoSnapshot(handle: BridgeHandle, timeoutMs: number): Promise<unknown> {
+  try {
+    const r = await runKernelCode(handle, SESSION_STATE_KERNEL, timeoutMs)
+    return { connected: true, ...(r.value as Record<string, unknown>) }
+  } catch (error) {
+    return {
+      connected: false,
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
+}
+
 /** Register the `/cae/api/*` JSON prefix route on the host webserver. */
 export function registerTelemetry(ctx: Context, config: { host: string; port: number; timeoutMs: number }): void {
   // webServer is optional in this plugin's composition: the tools are the
@@ -214,6 +229,9 @@ export function registerTelemetry(ctx: Context, config: { host: string; port: nu
               switch (method) {
                 case 'telemetry':
                   writeOk(res, await pingTelemetry(handle, timeout))
+                  return
+                case 'modelinfo':
+                  writeOk(res, await modelInfoSnapshot(handle, timeout))
                   return
                 default:
                   throw new CafeError('not-found', `unknown cae API method "${method}"`, 404)

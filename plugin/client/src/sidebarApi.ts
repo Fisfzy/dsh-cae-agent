@@ -124,3 +124,45 @@ export interface CaeTelemetry {
 export function caeTelemetry(signal?: AbortSignal): Promise<CaeTelemetry> {
   return call<CaeTelemetry>('telemetry', {}, signal, '/cae/api')
 }
+
+/** Facets of one live Abaqus model, as reported by the kernel snapshot. */
+export interface CaeModelFacets {
+  parts?: string[]
+  materials?: string[]
+  sections?: string[]
+  steps?: string[]
+  loads?: string[]
+  bc?: string[]
+  interactions?: string[]
+  constraints?: string[]
+  amplitudes?: string[]
+  instances?: string[]
+  sets?: string[]
+  surfaces?: string[]
+}
+
+/** One live Abaqus job. */
+export interface CaeJob {
+  name: string
+  status?: string
+  type?: string
+  model?: string
+  numCpus?: string
+  memory?: string
+}
+
+/** Full live session snapshot (models facets + jobs + cwd) from `/cae/api/modelinfo`. */
+export interface CaeModelInfo {
+  connected: boolean
+  /** os.getcwd() inside the CAE kernel. */
+  cwd?: string
+  models?: Record<string, CaeModelFacets>
+  jobs?: CaeJob[]
+  /** Human message when `connected` is false. */
+  error?: string
+}
+
+/** Snapshot the live Abaqus session (per-model facets, jobs, cwd) via the plugin route. */
+export function caeModelInfo(signal?: AbortSignal): Promise<CaeModelInfo> {
+  return call<CaeModelInfo>('modelinfo', {}, signal, '/cae/api')
+}

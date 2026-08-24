@@ -1,4 +1,5 @@
-import { bridgeRequest, DEFAULT_TIMEOUT_MS } from './core.js';
+import { bridgeRequest, runKernelCode, DEFAULT_TIMEOUT_MS } from './core.js';
+import { SESSION_STATE_KERNEL } from './kernels.js';
 // ── browser-trust fence (structural copy of BSB's trust-fence.ts) ───────────
 function header(headers, name) {
     const value = headers[name];
@@ -106,6 +107,20 @@ async function pingTelemetry(handle, timeoutMs) {
         };
     }
 }
+/** Snapshot the live CAE session (models facets + jobs + cwd) via the kernel.
+ *  Bridge-down is a normal `{connected:false}` value, not a thrown error. */
+async function modelInfoSnapshot(handle, timeoutMs) {
+    try {
+        const r = await runKernelCode(handle, SESSION_STATE_KERNEL, timeoutMs);
+        return { connected: true, ...r.value };
+    }
+    catch (error) {
+        return {
+            connected: false,
+            error: error instanceof Error ? error.message : String(error),
+        };
+    }
+}
 /** Register the `/cae/api/*` JSON prefix route on the host webserver. */
 export function registerTelemetry(ctx, config) {
     // webServer is optional in this plugin's composition: the tools are the
@@ -144,6 +159,9 @@ export function registerTelemetry(ctx, config) {
                     switch (method) {
                         case 'telemetry':
                             writeOk(res, await pingTelemetry(handle, timeout));
+                            return;
+                        case 'modelinfo':
+                            writeOk(res, await modelInfoSnapshot(handle, timeout));
                             return;
                         default:
                             throw new CafeError('not-found', `unknown cae API method "${method}"`, 404);
