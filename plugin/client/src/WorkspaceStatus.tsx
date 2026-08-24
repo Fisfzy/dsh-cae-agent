@@ -17,7 +17,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ensureCaeStyles } from './theme.js'
-import { fsTree, type FsEntry, type SessionScope } from './sidebarApi.js'
+import { fsTree, caeTelemetry, type FsEntry, type SessionScope, type CaeTelemetry } from './sidebarApi.js'
 import { IconRefresh, IconFolder } from './icons.js'
 
 interface Detected {
@@ -81,6 +81,26 @@ export function WorkspaceStatus({ scope, visible }: { scope: SessionScope; visib
   const [lastAt, setLastAt] = useState<number | null>(null)
   const seq = useRef(0)
 
+  // ── bridge telemetry (authoritative Abaqus workdir + live session) ───────
+  const [tele, setTele] = useState<CaeTelemetry | null>(null)
+  const [teleLoading, setTeleLoading] = useState(false)
+  const teleSeq = useRef(0)
+
+  const refreshTele = useCallback(async (signal?: AbortSignal) => {
+    const my = ++teleSeq.current
+    setTeleLoading(true)
+    try {
+      const t = await caeTelemetry(signal)
+      if (my !== teleSeq.current) return
+      setTele(t)
+    } catch {
+      if (my !== teleSeq.current) return
+      setTele(null)
+    } finally {
+      if (my === teleSeq.current) setTeleLoading(false)
+    }
+  }, [])
+
   const refresh = useCallback(
     async (signal?: AbortSignal) => {
       const my = ++seq.current
@@ -114,6 +134,18 @@ export function WorkspaceStatus({ scope, visible }: { scope: SessionScope; visib
       clearInterval(t)
     }
   }, [visible, refresh])
+
+  // Bridge telemetry: slower cadence (bridge ping is a real kernel round-trip).
+  useEffect(() => {
+    if (!visible) return
+    const ctrl = new AbortController()
+    void refreshTele(ctrl.signal)
+    const t = setInterval(() => void refreshTele(ctrl.signal), 5000)
+    return () => {
+      ctrl.abort()
+      clearInterval(t)
+    }
+  }, [visible, refreshTele])
 
   const persist = (v: string) => {
     setTarget(v)
@@ -166,6 +198,63 @@ export function WorkspaceStatus({ scope, visible }: { scope: SessionScope; visib
           >
             {meta.label}
           </span>
+        )}
+      </div>
+
+      {/* bridge telemetry — the real Abaqus workdir, straight from the bridge */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: '6px 8px',
+          marginBottom: 8,
+          borderRadius: 'var(--cae-radius-sm)',
+          border: '1px solid var(--cae-border)',
+          background: tele?.connected ? 'var(--cae-ok-soft)' : 'var(--cae-inset)',
+          fontSize: 11,
+        }}
+      >
+        {teleLoading && tele === null ? (
+          <span style={{ color: 'var(--cae-muted)' }}>桥接状态检测中…</span>
+        ) : tele?.connected ? (
+          <>
+            <span style={{ width: 7, height: 7, borderRadius: 999, background: 'var(--cae-ok)', flexShrink: 0, display: 'inline-block' }} />
+            <span style={{ color: 'var(--cae-ok)', fontWeight: 700, flexShrink: 0 }}>Abaqus 桥接已连接</span>
+            <span style={{ color: 'var(--cae-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--cae-mono)' }} title={tele.cwd ?? ''}>
+              {tele.cwd ?? ''}
+            </span>
+            {tele.models && tele.models.length > 0 && (
+              <span style={{ color: 'var(--cae-faint)', flexShrink: 0 }}>· {tele.models.length} 模型</span>
+            )}
+            {tele && tele.cwd && tele.cwd !== '' && tele.cwd !== target && (
+              <button
+                onClick={() => persist(tele.cwd!)}
+                title="把侦测目标设为桥接报告的工作目录"
+                style={{
+                  marginLeft: 'auto',
+                  flexShrink: 0,
+                  fontSize: 10.5,
+                  padding: '2px 8px',
+                  borderRadius: 999,
+                  border: '1px solid var(--cae-ok)',
+                  background: 'var(--cae-card)',
+                  color: 'var(--cae-ok)',
+                  cursor: 'pointer',
+                }}
+              >
+                用作侦测路径
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <span style={{ width: 7, height: 7, borderRadius: 999, background: 'var(--cae-err)', flexShrink: 0, display: 'inline-block' }} />
+            <span style={{ color: 'var(--cae-err)', fontWeight: 700, flexShrink: 0 }}>Abaqus 桥接离线</span>
+            <span style={{ color: 'var(--cae-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={tele?.error}>
+              未连到 CAE 内核，正在按文件推断
+            </span>
+          </>
         )}
       </div>
 

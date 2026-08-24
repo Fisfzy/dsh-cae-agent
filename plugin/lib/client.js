@@ -395,10 +395,10 @@ window.__ModuleLoader__.load({
 				this.code = code;
 			}
 		};
-		async function call(method, payload, signal) {
+		async function call(method, payload, signal, base = "/sidebar/api") {
 			let response;
 			try {
-				response = await fetch(`/sidebar/api/${method}`, {
+				response = await fetch(`${base}/${method}`, {
 					method: "POST",
 					headers: { "content-type": "application/json" },
 					body: JSON.stringify(payload),
@@ -426,6 +426,11 @@ window.__ModuleLoader__.load({
 		/** Read a text file under the session workspace (workspace-relative `path`). */
 		function fsRead(scope, path, signal) {
 			return call("fs.read", scopePayload(scope, { path }), signal);
+		}
+		/** Query the Abaqus bridge for live session telemetry via the plugin route.
+		*  Never throws for a bridge-offline condition — that is `{connected:false}`. */
+		function caeTelemetry(signal) {
+			return call("telemetry", {}, signal, "/cae/api");
 		}
 		//#endregion
 		//#region client/src/icons.tsx
@@ -537,6 +542,23 @@ window.__ModuleLoader__.load({
 			const [det, setDet] = (0, react.useState)(null);
 			const [lastAt, setLastAt] = (0, react.useState)(null);
 			const seq = (0, react.useRef)(0);
+			const [tele, setTele] = (0, react.useState)(null);
+			const [teleLoading, setTeleLoading] = (0, react.useState)(false);
+			const teleSeq = (0, react.useRef)(0);
+			const refreshTele = (0, react.useCallback)(async (signal) => {
+				const my = ++teleSeq.current;
+				setTeleLoading(true);
+				try {
+					const t = await caeTelemetry(signal);
+					if (my !== teleSeq.current) return;
+					setTele(t);
+				} catch {
+					if (my !== teleSeq.current) return;
+					setTele(null);
+				} finally {
+					if (my === teleSeq.current) setTeleLoading(false);
+				}
+			}, []);
 			const refresh = (0, react.useCallback)(async (signal) => {
 				const my = ++seq.current;
 				setLoading(true);
@@ -565,6 +587,16 @@ window.__ModuleLoader__.load({
 					clearInterval(t);
 				};
 			}, [visible, refresh]);
+			(0, react.useEffect)(() => {
+				if (!visible) return;
+				const ctrl = new AbortController();
+				refreshTele(ctrl.signal);
+				const t = setInterval(() => void refreshTele(ctrl.signal), 5e3);
+				return () => {
+					ctrl.abort();
+					clearInterval(t);
+				};
+			}, [visible, refreshTele]);
 			const persist = (v) => {
 				setTarget(v);
 				try {
@@ -639,6 +671,105 @@ window.__ModuleLoader__.load({
 								children: meta.label
 							})
 						]
+					}),
+					/* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
+						style: {
+							display: "flex",
+							alignItems: "center",
+							gap: 8,
+							padding: "6px 8px",
+							marginBottom: 8,
+							borderRadius: "var(--cae-radius-sm)",
+							border: "1px solid var(--cae-border)",
+							background: tele?.connected ? "var(--cae-ok-soft)" : "var(--cae-inset)",
+							fontSize: 11
+						},
+						children: teleLoading && tele === null ? /* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+							style: { color: "var(--cae-muted)" },
+							children: "桥接状态检测中…"
+						}) : tele?.connected ? /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { style: {
+								width: 7,
+								height: 7,
+								borderRadius: 999,
+								background: "var(--cae-ok)",
+								flexShrink: 0,
+								display: "inline-block"
+							} }),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								style: {
+									color: "var(--cae-ok)",
+									fontWeight: 700,
+									flexShrink: 0
+								},
+								children: "Abaqus 桥接已连接"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								style: {
+									color: "var(--cae-muted)",
+									overflow: "hidden",
+									textOverflow: "ellipsis",
+									whiteSpace: "nowrap",
+									fontFamily: "var(--cae-mono)"
+								},
+								title: tele.cwd ?? "",
+								children: tele.cwd ?? ""
+							}),
+							tele.models && tele.models.length > 0 && /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("span", {
+								style: {
+									color: "var(--cae-faint)",
+									flexShrink: 0
+								},
+								children: [
+									"· ",
+									tele.models.length,
+									" 模型"
+								]
+							}),
+							tele && tele.cwd && tele.cwd !== "" && tele.cwd !== target && /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
+								onClick: () => persist(tele.cwd),
+								title: "把侦测目标设为桥接报告的工作目录",
+								style: {
+									marginLeft: "auto",
+									flexShrink: 0,
+									fontSize: 10.5,
+									padding: "2px 8px",
+									borderRadius: 999,
+									border: "1px solid var(--cae-ok)",
+									background: "var(--cae-card)",
+									color: "var(--cae-ok)",
+									cursor: "pointer"
+								},
+								children: "用作侦测路径"
+							})
+						] }) : /* @__PURE__ */ (0, react_jsx_runtime.jsxs)(react_jsx_runtime.Fragment, { children: [
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { style: {
+								width: 7,
+								height: 7,
+								borderRadius: 999,
+								background: "var(--cae-err)",
+								flexShrink: 0,
+								display: "inline-block"
+							} }),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								style: {
+									color: "var(--cae-err)",
+									fontWeight: 700,
+									flexShrink: 0
+								},
+								children: "Abaqus 桥接离线"
+							}),
+							/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+								style: {
+									color: "var(--cae-muted)",
+									overflow: "hidden",
+									textOverflow: "ellipsis",
+									whiteSpace: "nowrap"
+								},
+								title: tele?.error,
+								children: "未连到 CAE 内核，正在按文件推断"
+							})
+						] })
 					}),
 					/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 						style: {

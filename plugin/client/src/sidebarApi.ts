@@ -51,10 +51,10 @@ export class SidebarApiError extends Error {
   }
 }
 
-async function call<T>(method: string, payload: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
+async function call<T>(method: string, payload: Record<string, unknown>, signal?: AbortSignal, base: string = '/sidebar/api'): Promise<T> {
   let response: Response
   try {
-    response = await fetch(`/sidebar/api/${method}`, {
+    response = await fetch(`${base}/${method}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(payload),
@@ -94,4 +94,33 @@ export function fsRead(scope: SessionScope, path: string, signal?: AbortSignal):
 /** Resolve the session's working directory (cwd) from the host. */
 export function sessionCwd(scope: SessionScope, signal?: AbortSignal): Promise<{ sessionId: string; cwd: string; root: string; parent: string | null }> {
   return call('session.cwd', scopePayload(scope, {}), signal)
+}
+
+// ── cae-agent's own `/cae/api` route (bridge-backed, NOT BSB's table) ──────
+// The cae-agent plugin registers this route on the host webserver; it proxies
+// the Abaqus socket bridge's `ping` so the sidebar can show the REAL Abaqus
+// workdir + live session state instead of guessing from workspace files.
+
+/** Live Abaqus/CAE state surfaced by `POST /cae/api/telemetry`. */
+export interface CaeTelemetry {
+  connected: boolean
+  /** os.getcwd() inside the CAE kernel == the authoritative Abaqus workdir. */
+  cwd?: string
+  models?: string[]
+  viewports?: string[]
+  abaqus_version?: string | null
+  python?: string
+  executable?: string
+  platform?: string
+  pid?: number
+  cpu_count?: number
+  bridge?: Record<string, unknown>
+  /** Human message when `connected` is false (bridge offline). */
+  error?: string
+}
+
+/** Query the Abaqus bridge for live session telemetry via the plugin route.
+ *  Never throws for a bridge-offline condition — that is `{connected:false}`. */
+export function caeTelemetry(signal?: AbortSignal): Promise<CaeTelemetry> {
+  return call<CaeTelemetry>('telemetry', {}, signal, '/cae/api')
 }
