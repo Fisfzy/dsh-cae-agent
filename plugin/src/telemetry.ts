@@ -176,49 +176,54 @@ async function pingTelemetry(handle: BridgeHandle, timeoutMs: number): Promise<u
 /** Register the `/cae/api/*` JSON prefix route on the host webserver. */
 export function registerTelemetry(ctx: Context, config: { host: string; port: number; timeoutMs: number }): void {
   // webServer is optional in this plugin's composition: the tools are the
-  // core, the HTTP route is the sidebar-facing extra. Absent server → no route,
-  // the plugin still loads (convention: optional deps via ctx.get()).
-  const webServer = ctx.get('webServer') as CafeWebServer | undefined
-  if (webServer === undefined) return
-  const webRuntime = ctx.get('webRuntime') as CafeWebRuntime | undefined
-  const trustedHosts = webRuntime?.trustedHosts ?? []
-  const handle: BridgeHandle = { host: config.host, port: config.port }
-  const timeout = config.timeoutMs || DEFAULT_TIMEOUT_MS
+  // core, the HTTP route is the sidebar-facing extra. We register the route
+  // inside a `ctx.inject(['webServer'], ...)` block — the documented cordis
+  // pattern for "run once this service is available" (the same idiom BSB uses
+  // for its optional `settings` service). If webServer is never present the
+  // callback simply never runs, the route doesn't exist, and the plugin still
+  // loads with its tools intact. (A bare `ctx.get('webServer')` in `apply`
+  // returns undefined because the plugin does not declare webServer in inject.)
+  ctx.inject(['webServer'], (sctx) => {
+    const webServer = sctx.get('webServer') as CafeWebServer
+    const webRuntime = sctx.get('webRuntime') as CafeWebRuntime | undefined
+    const trustedHosts = webRuntime?.trustedHosts ?? []
+    const handle: BridgeHandle = { host: config.host, port: config.port }
+    const timeout = config.timeoutMs || DEFAULT_TIMEOUT_MS
 
-  ctx.effect(
-    () =>
-      webServer.register({
-        kind: 'prefix',
-        path: '/cae/api',
-        handler: async (req, res) => {
-          if (!isTrustedApiRequest(req, trustedHosts)) {
-            writeJson(res, 403, { ok: false, error: { code: 'forbidden', message: 'forbidden' } })
-            return
-          }
-          if (req.method !== 'POST') {
-            writeJson(res, 405, { ok: false, error: { code: 'method-error', message: 'method not allowed' } })
-            return
-          }
-          // We do not need a body for telemetry; reject oversized bodies lazily.
-          const pathname = new URL(req.url ?? '/', 'http://dsh.internal').pathname
-          const method = pathname.startsWith('/cae/api/') ? pathname.slice('/cae/api/'.length) : undefined
-          if (method === undefined || method.includes('/')) {
-            writeError(res, new CafeError('not-found', 'unknown cae API method', 404))
-            return
-          }
-          try {
-            switch (method) {
-              case 'telemetry':
-                writeOk(res, await pingTelemetry(handle, timeout))
-                return
-              default:
-                throw new CafeError('not-found', `unknown cae API method "${method}"`, 404)
+    sctx.effect(
+      () =>
+        webServer.register({
+          kind: 'prefix',
+          path: '/cae/api',
+          handler: async (req, res) => {
+            if (!isTrustedApiRequest(req, trustedHosts)) {
+              writeJson(res, 403, { ok: false, error: { code: 'forbidden', message: 'forbidden' } })
+              return
             }
-          } catch (error) {
-            writeError(res, error)
-          }
-        },
-      }),
-    'dsh-cae-agent: /cae/api routes',
-  )
+            if (req.method !== 'POST') {
+              writeJson(res, 405, { ok: false, error: { code: 'method-error', message: 'method not allowed' } })
+              return
+            }
+            const pathname = new URL(req.url ?? '/', 'http://dsh.internal').pathname
+            const method = pathname.startsWith('/cae/api/') ? pathname.slice('/cae/api/'.length) : undefined
+            if (method === undefined || method.includes('/')) {
+              writeError(res, new CafeError('not-found', 'unknown cae API method', 404))
+              return
+            }
+            try {
+              switch (method) {
+                case 'telemetry':
+                  writeOk(res, await pingTelemetry(handle, timeout))
+                  return
+                default:
+                  throw new CafeError('not-found', `unknown cae API method "${method}"`, 404)
+              }
+            } catch (error) {
+              writeError(res, error)
+            }
+          },
+        }),
+      'dsh-cae-agent: /cae/api routes',
+    )
+  })
 }
