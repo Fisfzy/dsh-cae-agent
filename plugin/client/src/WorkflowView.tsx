@@ -620,49 +620,51 @@ export function WorkflowView(props: TabComponentProps) {
         </div>
       </div>
 
-      {/* sections → stepper */}
+      {/* sections → card containers with smooth expand/collapse */}
       {SECTIONS.map((sec) => {
         const steps = visibleBySection[sec.key]
         const isCollapsed = collapsed.has(sec.key)
         const secDone = steps.filter((s) => statusOf(s) === 'done').length
+        const openCls = isCollapsed ? '' : 'cae-section-open'
         return (
-          <div key={sec.key} style={{ marginBottom: 14 }}>
-            <button onClick={() => toggleSection(sec.key)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, border: 'none', background: 'transparent', padding: '4px 0', textAlign: 'left' }}>
-              <span style={{ display: 'inline-flex', color: 'var(--cae-faint)', transform: isCollapsed ? 'none' : 'rotate(90deg)', transition: 'transform 0.15s' }}>
+          <div key={sec.key} className={`cae-section ${openCls}`.trim()}>
+            <button onClick={() => toggleSection(sec.key)} className="cae-section-header">
+              <span className="cae-section-chevron">
                 <IconChevron size={13} />
               </span>
-              <span style={{ fontWeight: 700, fontSize: 13 }}>{sec.title}</span>
-              <span style={{ fontSize: 11, color: 'var(--cae-faint)' }}>
+              <span className="cae-section-title">{sec.title}</span>
+              <span className="cae-section-count">
                 {secDone}/{steps.length}
               </span>
             </button>
-            {!isCollapsed && (
-              <>
-                <div style={{ fontSize: 11, color: 'var(--cae-faint)', margin: '0 0 8px 21px' }}>{sec.hint}</div>
+            <div className="cae-section-body">
+              <div className="cae-section-body-inner">
+                <div className="cae-section-hint">{sec.hint}</div>
                 {steps.length === 0 ? (
-                  <div style={{ fontSize: 11, color: 'var(--cae-muted)', margin: '0 0 4px 21px' }}>无匹配步骤</div>
+                  <div style={{ fontSize: 11, color: 'var(--cae-muted)', margin: '0 0 4px 2px' }}>无匹配步骤</div>
                 ) : (
                   <div style={{ marginLeft: 8 }}>
                     {steps.map((s, i) => (
-                      <StepCard
-                        key={s.n}
-                        step={s}
-                        status={statusOf(s)}
-                        live={live}
-                        error={nodes.get(s.n)?.error}
-                        errorDetail={nodes.get(s.n)?.detail}
-                        real={realStateOf(s, info)}
-                        dimmed={dimmed(s)}
-                        open={openSteps.has(s.n)}
-                        isLast={i === steps.length - 1}
-                        onToggleDone={() => toggleDone(s.n)}
-                        onToggleOpen={() => toggleOpen(s.n)}
-                      />
+                      <div key={s.n} style={{ ['--i' as string]: i } as CSSProperties}>
+                        <StepCard
+                          step={s}
+                          status={statusOf(s)}
+                          live={live}
+                          error={nodes.get(s.n)?.error}
+                          errorDetail={nodes.get(s.n)?.detail}
+                          real={realStateOf(s, info)}
+                          dimmed={dimmed(s)}
+                          open={openSteps.has(s.n)}
+                          isLast={i === steps.length - 1}
+                          onToggleDone={() => toggleDone(s.n)}
+                          onToggleOpen={() => toggleOpen(s.n)}
+                        />
+                      </div>
                     ))}
                   </div>
                 )}
-              </>
-            )}
+              </div>
+            </div>
           </div>
         )
       })}

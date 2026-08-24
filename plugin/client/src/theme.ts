@@ -36,6 +36,7 @@ const CSS = `
   --cae-radius: 8px;
   --cae-radius-sm: 5px;
   --cae-shadow: 0 1px 2px rgba(27, 31, 35, 0.06);
+  --cae-ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 .cae-root[data-cae-dark="1"],
 [data-theme="dark"] .cae-root,
@@ -137,6 +138,79 @@ const CSS = `
   background: var(--cae-err-soft) !important;
 }
 .cae-card-done { border-left: 3px solid var(--cae-ok) !important; }
+
+/* ── section cards + smooth expand/collapse ────────────────────────────── */
+.cae-section {
+  border: 1px solid var(--cae-border);
+  border-radius: var(--cae-radius);
+  background: var(--cae-card);
+  box-shadow: var(--cae-shadow);
+  margin-bottom: 12px;
+  overflow: hidden;
+  transition: border-color 0.2s var(--cae-ease), box-shadow 0.2s var(--cae-ease);
+}
+.cae-section-open { border-color: color-mix(in srgb, var(--cae-accent) 35%, var(--cae-border)); }
+.cae-section-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  transition: background 0.15s var(--cae-ease);
+}
+.cae-section-header:hover { background: var(--cae-card-hover); }
+.cae-section-chevron {
+  display: inline-flex;
+  color: var(--cae-faint);
+  transform: rotate(0deg);
+  transition: transform 0.24s var(--cae-ease);
+  flex-shrink: 0;
+}
+.cae-section-open .cae-section-chevron { transform: rotate(90deg); }
+.cae-section-title { font-weight: 700; font-size: 13px; color: var(--cae-fg); }
+.cae-section-count { font-size: 11px; color: var(--cae-faint); }
+/* the animatable collapse region: 0fr -> 1fr */
+.cae-section-body {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows 0.3s var(--cae-ease), opacity 0.24s var(--cae-ease);
+}
+.cae-section-open .cae-section-body { grid-template-rows: 1fr; opacity: 1; }
+.cae-section-body-inner {
+  overflow: hidden;
+  min-height: 0;
+  padding: 0 12px 10px 12px;
+}
+/* staggered card fade/slide-in: set --i per card, delay scales with it */
+.cae-step {
+  --i: 0;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.26s var(--cae-ease) calc(var(--i) * 40ms),
+              transform 0.26s var(--cae-ease) calc(var(--i) * 40ms);
+}
+.cae-section-open .cae-step { opacity: 1; transform: translateY(0); }
+/* the section hint line fades in too */
+.cae-section-hint {
+  font-size: 11px;
+  color: var(--cae-faint);
+  margin: 0 0 8px 2px;
+  transition: opacity 0.22s var(--cae-ease);
+}
+
+/* ── reduced motion: drop the fancy transitions (no a11y regression) ────── */
+@media (prefers-reduced-motion: reduce) {
+  .cae-section-body,
+  .cae-step,
+  .cae-section-chevron,
+  .cae-section,
+  .cae-section-header { transition: none !important; }
+  .cae-step { opacity: 1; transform: none; }
+}
 `
 
 /** Inject the plugin stylesheet once. Idempotent — safe to call per mount. */
