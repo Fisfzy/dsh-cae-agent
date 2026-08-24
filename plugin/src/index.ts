@@ -28,6 +28,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
+import { spawnSync } from 'node:child_process'
 import Schema from '@deepseek-ai/schemastery'
 import { registerRead } from './tools/read.js'
 import { registerMaterial } from './tools/material.js'
@@ -65,14 +66,58 @@ export interface Config {
   launchTimeoutMs: number
 }
 
-/** Resolve the Abaqus launcher command without machine-specific hardcoding:
- * prefer an explicit env override, then a bare `abaqus` on PATH. */
-function defaultAbaqusCommand(): string {
-  const candidates = [process.env.ABAQUS_COMMAND, 'abaqus'].filter(Boolean) as string[]
-  for (const c of candidates) {
-    if (c === 'abaqus') return c
-    try { if (fs.existsSync(c)) return c } catch { /* keep looking */ }
+/** Windows `where`-style command resolution: return the first existing path
+ *  for `cmd` found on PATH, or undefined. */
+function resolveOnPath(cmd: string): string | undefined {
+  try {
+    const pick = process.platform === 'win32' ? 'where' : 'which'
+    const res = spawnSync(pick, [cmd], { encoding: 'utf8', timeout: 5000, windowsHide: true })
+    if (res.status !== 0) return undefined
+    const line = res.stdout?.split(/\r?\n/).map((s) => s.trim()).find((s) => s && s.length > 0)
+    if (!line) return undefined
+    const resolved = process.platform === 'win32' ? line.replaceAll('/', '\\') : line
+    try {
+      if (process.platform === 'win32' && fs.existsSync(resolved)) return resolved
+      if (fs.existsSync(resolved)) return resolved
+    } catch { /* keep looking */ }
+    return resolved
+  } catch {
+    return undefined
   }
+}
+
+/** Resolve the Abaqus launcher command without machine-specific hardcoding,
+ *  in priority order:
+ *    1. explicit env override (ABAQUS_COMMAND)
+ *    2. an existing Abaqus launcher (ABQcaeK.exe under a SIMULIA EstProducts
+ *       install, or the `abaqus.bat`/`abaqus` command resolved via `where`)
+ *    3. a bare `abaqus` on PATH (the spawn will let the OS resolve it)
+ *  This matters: abaqus_launch_cae validates the launch path with
+ *  fs.existsSync, and a bare `abaqus` (a PATH command, not a file) fails that
+ *  check. Resolving to a real path makes auto-launch actually work. */
+function defaultAbaqusCommand(): string {
+  const env = process.env.ABAQUS_COMMAND
+  if (env) return env
+  // Probe common SIMULIA install layouts (glob the version dir).
+  try {
+    const simulia = process.env.SIMULIA ?? 'D:\\SIMULIA'
+    for (const base of [simulia, 'C:\\SIMULIA']) {
+      if (!fs.existsSync(base)) continue
+      const exe = path.join(base, 'EstProducts', '2024', 'win_b64', 'code', 'bin', 'ABQcaeK.exe')
+      if (fs.existsSync(exe)) return exe
+      // fall back: any EstProducts/<ver>/win_b64/.../ABQcaeK.exe
+      const est = path.join(base, 'EstProducts')
+      if (fs.existsSync(est)) {
+        for (const ver of fs.readdirSync(est)) {
+          const p = path.join(est, ver, 'win_b64', 'code', 'bin', 'ABQcaeK.exe')
+          if (fs.existsSync(p)) return p
+        }
+      }
+    }
+  } catch { /* keep looking */ }
+  // Resolve `abaqus` (or `abaqus.bat`) to a real path via `where`.
+  const fromPath = resolveOnPath('abaqus') ?? resolveOnPath('abaqus.bat')
+  if (fromPath) return fromPath
   return 'abaqus'
 }
 

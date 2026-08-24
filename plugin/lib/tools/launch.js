@@ -88,10 +88,17 @@ export function registerLaunch(ctx, config) {
                     message: 'Abaqus socket bridge already listening; reusing the live session',
                 };
             }
-            // 2) Validate launcher + plugin paths.
-            const abqCmd = config.abaqusCommand.replaceAll('/', '\\');
-            if (!fs.existsSync(abqCmd)) {
+            // 2) Validate launcher + plugin paths. A launcher that is a real PATH
+            // entry (e.g. `abaqus` → `abaqus.bat`) is NOT a file, so fs.existsSync
+            // would wrongly reject it. Only require the file to exist when config
+            // gave an explicit path (absolute or contains a separator).
+            const abqCmd = config.abaqusCommand.trim().replaceAll('/', '\\');
+            const isExplicitPath = path.isAbsolute(abqCmd) || abqCmd.includes('\\') || abqCmd.includes('/');
+            if (isExplicitPath && !fs.existsSync(abqCmd)) {
                 throw new Error(`abaqusCommand not found: ${abqCmd} (set config.abaqusCommand)`);
+            }
+            if (!abqCmd) {
+                throw new Error('abaqusCommand is empty (set config.abaqusCommand)');
             }
             const pluginPath = config.bridgePluginPath;
             if (!fs.existsSync(pluginPath)) {
