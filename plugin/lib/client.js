@@ -224,16 +224,16 @@ window.__ModuleLoader__.load({
 		//#endregion
 		//#region client/src/index.tsx
 		const name = "dsh-cae-agent";
-		const inject = [];
+		const inject = ["betterSidebar"];
 		function apply(ctx) {
-			const betterSidebar = ctx.get("betterSidebar");
-			if (!betterSidebar) return;
+			const betterSidebar = ctx.betterSidebar;
+			if (betterSidebar === void 0) return;
 			ctx.effect(() => betterSidebar.registerTab({
 				id: "dsh-cae-agent:workflow",
 				title: "Abaqus 工作流",
 				order: 60,
 				component: (props) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)(WorkflowView, { scope: props.scope })
-			}));
+			}), "dsh-cae-agent: workflow tab");
 			ctx.effect(() => betterSidebar.registerFileViewer({
 				id: "dsh-cae-agent:csv",
 				title: "Abaqus CSV",
@@ -243,7 +243,7 @@ window.__ModuleLoader__.load({
 					content: props.content,
 					path: props.path
 				})
-			}));
+			}), "dsh-cae-agent: csv viewer");
 		}
 		//#endregion
 		exports.apply = apply;
