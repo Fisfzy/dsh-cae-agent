@@ -1045,6 +1045,35 @@ window.__ModuleLoader__.load({
 			color: "var(--cae-muted)",
 			cursor: "pointer"
 		};
+		const STATUS_FILTERS = [
+			{
+				value: "all",
+				label: "全部"
+			},
+			{
+				value: "pending",
+				label: "待办"
+			},
+			{
+				value: "active",
+				label: "进行中"
+			},
+			{
+				value: "done",
+				label: "已完成"
+			},
+			{
+				value: "error",
+				label: "出错"
+			}
+		];
+		const STATUS_LABEL = {
+			all: "全部",
+			pending: "待办",
+			active: "进行中",
+			done: "已完成",
+			error: "出错"
+		};
 		function realStateOf(step, info) {
 			if (!info || !info.connected) return null;
 			const models = info.models ?? {};
@@ -1149,13 +1178,9 @@ window.__ModuleLoader__.load({
 				children: inner
 			});
 		}
-		function StepCard({ step, status, live, error, errorDetail, real, dimmed, open, isLast, onToggleDone, onToggleOpen }) {
+		function StepCard({ step, status, live, error, errorDetail, real, open, isLast, onToggleDone, onToggleOpen }) {
 			return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 				className: "cae-step",
-				style: {
-					opacity: dimmed ? .45 : 1,
-					transition: "opacity 0.15s"
-				},
 				children: [/* @__PURE__ */ (0, react_jsx_runtime.jsxs)("div", {
 					className: "cae-rail",
 					children: [/* @__PURE__ */ (0, react_jsx_runtime.jsx)(StatusDot, {
@@ -1469,7 +1494,7 @@ window.__ModuleLoader__.load({
 			}, [visible]);
 			const [done, setDone] = (0, react.useState)(() => loadSet(progressKey));
 			const [query, setQuery] = (0, react.useState)("");
-			const [kind, setKind] = (0, react.useState)("any");
+			const [statusFilter, setStatusFilter] = (0, react.useState)("all");
 			const [openSteps, setOpenSteps] = (0, react.useState)(/* @__PURE__ */ new Set());
 			const [collapsed, setCollapsed] = (0, react.useState)(/* @__PURE__ */ new Set());
 			const [copiedChain, setCopiedChain] = (0, react.useState)(false);
@@ -1506,10 +1531,6 @@ window.__ModuleLoader__.load({
 				const q = query.toLowerCase();
 				return `${s.goal} ${s.tools.join(" ")} ${s.note}`.toLowerCase().includes(q);
 			}, [query]);
-			const dimmed = (0, react.useCallback)((s) => {
-				if (kind === "any" || s.kinds === "any") return false;
-				return !s.kinds.includes(kind);
-			}, [kind]);
 			const statusOf = (0, react.useCallback)((s) => {
 				if (live) return nodes.get(s.n)?.status ?? "pending";
 				return done.has(s.n) ? "done" : "pending";
@@ -1518,15 +1539,19 @@ window.__ModuleLoader__.load({
 				nodes,
 				done
 			]);
+			const statusMatch = (0, react.useCallback)((s) => {
+				if (statusFilter === "all") return true;
+				return statusOf(s) === statusFilter;
+			}, [statusFilter, statusOf]);
 			const visibleBySection = (0, react.useMemo)(() => {
 				const map = {
 					pre: [],
 					solve: [],
 					post: []
 				};
-				for (const s of STEPS) if (matches(s)) map[s.section].push(s);
+				for (const s of STEPS) if (matches(s) && statusMatch(s)) map[s.section].push(s);
 				return map;
-			}, [matches]);
+			}, [matches, statusMatch]);
 			const doneCount = live ? STEPS.filter((s) => (nodes.get(s.n)?.status ?? "pending") === "done").length : done.size;
 			const total = STEPS.length;
 			const currentNode = live && progress.current ? nodes.get(progress.current) : void 0;
@@ -1649,25 +1674,41 @@ window.__ModuleLoader__.load({
 								gap: 6,
 								alignItems: "center"
 							},
-							children: [[
-								"any",
-								"solid",
-								"shell",
-								"composite",
-								"beam"
-							].map((k) => {
-								const active = kind === k;
-								return /* @__PURE__ */ (0, react_jsx_runtime.jsx)("button", {
-									onClick: () => setKind(k),
+							children: [STATUS_FILTERS.map((f) => {
+								const active = statusFilter === f.value;
+								const count = f.value === "all" ? STEPS.length : STEPS.filter((s) => statusOf(s) === f.value).length;
+								const color = f.value === "active" ? "var(--cae-accent)" : f.value === "done" ? "var(--cae-ok)" : f.value === "error" ? "var(--cae-err)" : "var(--cae-muted)";
+								f.value === "active" || f.value === "done" || f.value;
+								return /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
+									onClick: () => setStatusFilter(f.value),
 									style: {
 										...chipBase,
-										background: active ? "var(--cae-accent)" : "var(--cae-card)",
-										color: active ? "#fff" : "var(--cae-muted)",
-										borderColor: active ? "var(--cae-accent)" : "var(--cae-border)",
+										display: "inline-flex",
+										alignItems: "center",
+										gap: 5,
+										background: active ? color : "var(--cae-card)",
+										color: active ? "#fff" : f.value === "all" ? "var(--cae-muted)" : color,
+										borderColor: active ? color : "var(--cae-border)",
 										fontWeight: active ? 600 : 400
 									},
-									children: k === "any" ? "全部" : KIND_LABEL[k]
-								}, k);
+									children: [
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", { style: {
+											width: 6,
+											height: 6,
+											borderRadius: 999,
+											background: active ? "#fff" : color,
+											display: "inline-block"
+										} }),
+										f.label,
+										/* @__PURE__ */ (0, react_jsx_runtime.jsx)("span", {
+											style: {
+												opacity: active ? .85 : .6,
+												fontWeight: 600
+											},
+											children: count
+										})
+									]
+								}, f.value);
 							}), /* @__PURE__ */ (0, react_jsx_runtime.jsxs)("button", {
 								onClick: () => {
 									copyText(chainPrompt()).then((ok) => {
@@ -1762,7 +1803,7 @@ window.__ModuleLoader__.load({
 											color: "var(--cae-muted)",
 											margin: "0 0 4px 2px"
 										},
-										children: "无匹配步骤"
+										children: statusFilter !== "all" ? `没有「${STATUS_LABEL[statusFilter]}」的步骤` : "无匹配步骤"
 									}) : /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
 										style: { marginLeft: 8 },
 										children: steps.map((s, i) => /* @__PURE__ */ (0, react_jsx_runtime.jsx)("div", {
@@ -1774,7 +1815,6 @@ window.__ModuleLoader__.load({
 												error: nodes.get(s.n)?.error,
 												errorDetail: nodes.get(s.n)?.detail,
 												real: realStateOf(s, info),
-												dimmed: dimmed(s),
 												open: openSteps.has(s.n),
 												isLast: i === steps.length - 1,
 												onToggleDone: () => toggleDone(s.n),

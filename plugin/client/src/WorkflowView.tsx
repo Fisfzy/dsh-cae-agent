@@ -14,7 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import type { TabComponentProps } from 'dsh-better-sidebar'
 import { ensureCaeStyles } from './theme.js'
-import { STEPS, SECTIONS, KIND_LABEL, chainPrompt, type Step, type SectionKey, type ModelKind } from './steps.js'
+import { STEPS, SECTIONS, KIND_LABEL, chainPrompt, type Step, type SectionKey } from './steps.js'
 import { parseProgress, nodeMap, PROGRESS_FILENAME, type ProgressFile, type NodeStatus } from './progress.js'
 import { fsRead, caeModelInfo, type CaeModelInfo } from './sidebarApi.js'
 import { WorkspaceStatus } from './WorkspaceStatus.js'
@@ -55,6 +55,24 @@ const chipBase: CSSProperties = {
   background: 'var(--cae-card)',
   color: 'var(--cae-muted)',
   cursor: 'pointer',
+}
+
+// ── status filter: the toolbar lets the user show only steps in a given
+// progress state (all / pending / active / done / error). Colors match the
+// stepper status lights so the filter and the dots read as one language.
+const STATUS_FILTERS: { value: NodeStatus | 'all'; label: string }[] = [
+  { value: 'all', label: '全部' },
+  { value: 'pending', label: '待办' },
+  { value: 'active', label: '进行中' },
+  { value: 'done', label: '已完成' },
+  { value: 'error', label: '出错' },
+]
+const STATUS_LABEL: Record<NodeStatus | 'all', string> = {
+  all: '全部',
+  pending: '待办',
+  active: '进行中',
+  done: '已完成',
+  error: '出错',
 }
 
 // ── map a workflow step to the REAL objects present in the live CAE session ──
@@ -187,7 +205,6 @@ function StepCard({
   error,
   errorDetail,
   real,
-  dimmed,
   open,
   isLast,
   onToggleDone,
@@ -199,7 +216,6 @@ function StepCard({
   error?: string
   errorDetail?: string
   real?: { label: string; items: string[] } | null
-  dimmed: boolean
   open: boolean
   isLast: boolean
   onToggleDone: () => void
@@ -229,7 +245,7 @@ function StepCard({
       : '标记此步已完成'
 
   return (
-    <div className="cae-step" style={{ opacity: dimmed ? 0.45 : 1, transition: 'opacity 0.15s' }}>
+    <div className="cae-step">
       <div className="cae-rail">
         <StatusDot status={status} onClick={live ? undefined : onToggleDone} title={dotTitle} />
         {!isLast && <div className="cae-line" />}
@@ -442,7 +458,7 @@ export function WorkflowView(props: TabComponentProps) {
   // ── guide-mode manual state ──────────────────────────────────────────────
   const [done, setDone] = useState<Set<string>>(() => loadSet(progressKey))
   const [query, setQuery] = useState('')
-  const [kind, setKind] = useState<'any' | ModelKind>('any')
+  const [statusFilter, setStatusFilter] = useState<NodeStatus | 'all'>('all')
   const [openSteps, setOpenSteps] = useState<Set<string>>(new Set())
   const [collapsed, setCollapsed] = useState<Set<SectionKey>>(new Set())
   const [copiedChain, setCopiedChain] = useState(false)
@@ -489,14 +505,6 @@ export function WorkflowView(props: TabComponentProps) {
     },
     [query],
   )
-  const dimmed = useCallback(
-    (s: Step): boolean => {
-      if (kind === 'any' || s.kinds === 'any') return false
-      return !s.kinds.includes(kind)
-    },
-    [kind],
-  )
-
   const statusOf = useCallback(
     (s: Step): NodeStatus => {
       if (live) return nodes.get(s.n)?.status ?? 'pending'
@@ -504,12 +512,21 @@ export function WorkflowView(props: TabComponentProps) {
     },
     [live, nodes, done],
   )
+  // status filter: only show steps whose LIVE status (or guide-mode manual
+  // done) equals the selected status. 'all' shows everything.
+  const statusMatch = useCallback(
+    (s: Step): boolean => {
+      if (statusFilter === 'all') return true
+      return statusOf(s) === statusFilter
+    },
+    [statusFilter, statusOf],
+  )
 
   const visibleBySection = useMemo(() => {
     const map: Record<SectionKey, Step[]> = { pre: [], solve: [], post: [] }
-    for (const s of STEPS) if (matches(s)) map[s.section].push(s)
+    for (const s of STEPS) if (matches(s) && statusMatch(s)) map[s.section].push(s)
     return map
-  }, [matches])
+  }, [matches, statusMatch])
 
   const doneCount = live ? STEPS.filter((s) => (nodes.get(s.n)?.status ?? 'pending') === 'done').length : done.size
   const total = STEPS.length
@@ -562,21 +579,29 @@ export function WorkflowView(props: TabComponentProps) {
           <input type="text" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="搜索步骤 / 工具 / 备注…" style={{ paddingLeft: 26 }} />
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-          {(['any', 'solid', 'shell', 'composite', 'beam'] as const).map((k) => {
-            const active = kind === k
+          {STATUS_FILTERS.map((f) => {
+            const active = statusFilter === f.value
+            const count = f.value === 'all' ? STEPS.length : STEPS.filter((s) => statusOf(s) === f.value).length
+            const color = f.value === 'active' ? 'var(--cae-accent)' : f.value === 'done' ? 'var(--cae-ok)' : f.value === 'error' ? 'var(--cae-err)' : 'var(--cae-muted)'
+            const soft = f.value === 'active' ? 'var(--cae-accent-soft)' : f.value === 'done' ? 'var(--cae-ok-soft)' : f.value === 'error' ? 'var(--cae-err-soft)' : 'var(--cae-inset)'
             return (
               <button
-                key={k}
-                onClick={() => setKind(k)}
+                key={f.value}
+                onClick={() => setStatusFilter(f.value)}
                 style={{
                   ...chipBase,
-                  background: active ? 'var(--cae-accent)' : 'var(--cae-card)',
-                  color: active ? '#fff' : 'var(--cae-muted)',
-                  borderColor: active ? 'var(--cae-accent)' : 'var(--cae-border)',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 5,
+                  background: active ? color : 'var(--cae-card)',
+                  color: active ? '#fff' : f.value === 'all' ? 'var(--cae-muted)' : color,
+                  borderColor: active ? color : 'var(--cae-border)',
                   fontWeight: active ? 600 : 400,
                 }}
               >
-                {k === 'any' ? '全部' : KIND_LABEL[k]}
+                <span style={{ width: 6, height: 6, borderRadius: 999, background: active ? '#fff' : color, display: 'inline-block' }} />
+                {f.label}
+                <span style={{ opacity: active ? 0.85 : 0.6, fontWeight: 600 }}>{count}</span>
               </button>
             )
           })}
@@ -641,7 +666,9 @@ export function WorkflowView(props: TabComponentProps) {
               <div className="cae-section-body-inner">
                 <div className="cae-section-hint">{sec.hint}</div>
                 {steps.length === 0 ? (
-                  <div style={{ fontSize: 11, color: 'var(--cae-muted)', margin: '0 0 4px 2px' }}>无匹配步骤</div>
+                  <div style={{ fontSize: 11, color: 'var(--cae-muted)', margin: '0 0 4px 2px' }}>
+                    {statusFilter !== 'all' ? `没有「${STATUS_LABEL[statusFilter]}」的步骤` : '无匹配步骤'}
+                  </div>
                 ) : (
                   <div style={{ marginLeft: 8 }}>
                     {steps.map((s, i) => (
@@ -653,7 +680,6 @@ export function WorkflowView(props: TabComponentProps) {
                           error={nodes.get(s.n)?.error}
                           errorDetail={nodes.get(s.n)?.detail}
                           real={realStateOf(s, info)}
-                          dimmed={dimmed(s)}
                           open={openSteps.has(s.n)}
                           isLast={i === steps.length - 1}
                           onToggleDone={() => toggleDone(s.n)}
