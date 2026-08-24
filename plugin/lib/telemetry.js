@@ -121,60 +121,50 @@ async function modelInfoSnapshot(handle, timeoutMs) {
         };
     }
 }
-/** Register the `/cae/api/*` JSON prefix route on the host webserver. */
+/** Register the `/cae/api/*` JSON prefix route on the host webserver.
+ *  webServer + webRuntime are declared in the plugin's `inject`, so they are
+ *  available as context properties here (ctx.webServer), exactly like
+ *  dsh-better-sidebar — a nested ctx.inject(['webServer'], ...) did NOT fire,
+ *  so this route registers directly instead. */
 export function registerTelemetry(ctx, config) {
-    // webServer is optional in this plugin's composition: the tools are the
-    // core, the HTTP route is the sidebar-facing extra. We register the route
-    // inside a `ctx.inject(['webServer'], ...)` block — the documented cordis
-    // pattern for "run once this service is available" (the same idiom BSB uses
-    // for its optional `settings` service). If webServer is never present the
-    // callback simply never runs, the route doesn't exist, and the plugin still
-    // loads with its tools intact. (A bare `ctx.get('webServer')` in `apply`
-    // returns undefined because the plugin does not declare webServer in inject.)
-    ctx.inject(['webServer'], (sctx) => {
-        // When a service is injected, it is exposed as a PROPERTY on the callback's
-        // context (sctx.webServer), not via sctx.get(name) — the same way BSB reads
-        // `sctx.settings`. Using sctx.get('webServer') here returned undefined, so
-        // the route silently never registered.
-        const webServer = sctx.webServer;
-        const webRuntime = sctx.webRuntime;
-        const trustedHosts = webRuntime?.trustedHosts ?? [];
-        const handle = { host: config.host, port: config.port };
-        const timeout = config.timeoutMs || DEFAULT_TIMEOUT_MS;
-        sctx.effect(() => webServer.register({
-            kind: 'prefix',
-            path: '/cae/api',
-            handler: async (req, res) => {
-                if (!isTrustedApiRequest(req, trustedHosts)) {
-                    writeJson(res, 403, { ok: false, error: { code: 'forbidden', message: 'forbidden' } });
-                    return;
+    const webServer = ctx.webServer;
+    const webRuntime = ctx.webRuntime;
+    const trustedHosts = webRuntime?.trustedHosts ?? [];
+    const handle = { host: config.host, port: config.port };
+    const timeout = config.timeoutMs || DEFAULT_TIMEOUT_MS;
+    ctx.effect(() => webServer.register({
+        kind: 'prefix',
+        path: '/cae/api',
+        handler: async (req, res) => {
+            if (!isTrustedApiRequest(req, trustedHosts)) {
+                writeJson(res, 403, { ok: false, error: { code: 'forbidden', message: 'forbidden' } });
+                return;
+            }
+            if (req.method !== 'POST') {
+                writeJson(res, 405, { ok: false, error: { code: 'method-error', message: 'method not allowed' } });
+                return;
+            }
+            const pathname = new URL(req.url ?? '/', 'http://dsh.internal').pathname;
+            const method = pathname.startsWith('/cae/api/') ? pathname.slice('/cae/api/'.length) : undefined;
+            if (method === undefined || method.includes('/')) {
+                writeError(res, new CafeError('not-found', 'unknown cae API method', 404));
+                return;
+            }
+            try {
+                switch (method) {
+                    case 'telemetry':
+                        writeOk(res, await pingTelemetry(handle, timeout));
+                        return;
+                    case 'modelinfo':
+                        writeOk(res, await modelInfoSnapshot(handle, timeout));
+                        return;
+                    default:
+                        throw new CafeError('not-found', `unknown cae API method "${method}"`, 404);
                 }
-                if (req.method !== 'POST') {
-                    writeJson(res, 405, { ok: false, error: { code: 'method-error', message: 'method not allowed' } });
-                    return;
-                }
-                const pathname = new URL(req.url ?? '/', 'http://dsh.internal').pathname;
-                const method = pathname.startsWith('/cae/api/') ? pathname.slice('/cae/api/'.length) : undefined;
-                if (method === undefined || method.includes('/')) {
-                    writeError(res, new CafeError('not-found', 'unknown cae API method', 404));
-                    return;
-                }
-                try {
-                    switch (method) {
-                        case 'telemetry':
-                            writeOk(res, await pingTelemetry(handle, timeout));
-                            return;
-                        case 'modelinfo':
-                            writeOk(res, await modelInfoSnapshot(handle, timeout));
-                            return;
-                        default:
-                            throw new CafeError('not-found', `unknown cae API method "${method}"`, 404);
-                    }
-                }
-                catch (error) {
-                    writeError(res, error);
-                }
-            },
-        }), 'dsh-cae-agent: /cae/api routes');
-    });
+            }
+            catch (error) {
+                writeError(res, error);
+            }
+        },
+    }), 'dsh-cae-agent: /cae/api routes');
 }

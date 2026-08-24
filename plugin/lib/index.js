@@ -17,8 +17,12 @@ import { registerTelemetry } from './telemetry.js';
 export const name = 'dsh-cae-agent';
 /** Runtime dependencies this plugin requires before it can load. `attachments`
  * is needed by `capture_viewport` (image persistence); `tools` is the registry
- * every tool is registered on. Both are required, so both belong in inject. */
-export const inject = ['tools', 'attachments'];
+ * every tool is registered on. `webServer` + `webRuntime` are required for the
+ * browser-facing `/cae/api/*` route (sidebar bridge telemetry) — declared via
+ * inject exactly like dsh-better-sidebar, so the service is a context property
+ * and the route registers reliably (a nested ctx.inject was not firing). All
+ * are required, so all belong in inject. */
+export const inject = ['tools', 'attachments', 'webServer', 'webRuntime'];
 /** Windows `where`-style command resolution: return the first existing path
  *  for `cmd` found on PATH, or undefined. */
 function resolveOnPath(cmd) {

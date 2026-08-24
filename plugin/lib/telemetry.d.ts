@@ -33,7 +33,11 @@ interface CafeHttpRequest {
 export declare function isLoopbackHostname(hostname: string): boolean;
 /** Whether one request may reach the plugin routes (loopback/trusted + same-origin). */
 export declare function isTrustedApiRequest(request: CafeHttpRequest, trustedHosts: readonly string[]): boolean;
-/** Register the `/cae/api/*` JSON prefix route on the host webserver. */
+/** Register the `/cae/api/*` JSON prefix route on the host webserver.
+ *  webServer + webRuntime are declared in the plugin's `inject`, so they are
+ *  available as context properties here (ctx.webServer), exactly like
+ *  dsh-better-sidebar — a nested ctx.inject(['webServer'], ...) did NOT fire,
+ *  so this route registers directly instead. */
 export declare function registerTelemetry(ctx: Context, config: {
     host: string;
     port: number;
