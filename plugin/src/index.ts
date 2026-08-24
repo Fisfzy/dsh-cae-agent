@@ -29,6 +29,7 @@ import os from 'node:os'
 import path from 'node:path'
 import fs from 'node:fs'
 import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import Schema from '@deepseek-ai/schemastery'
 import { registerRead } from './tools/read.js'
 import { registerMaterial } from './tools/material.js'
@@ -121,11 +122,30 @@ function defaultAbaqusCommand(): string {
   return 'abaqus'
 }
 
-/** Resolve the Abaqus MCP bridge plugin under the current user's home. */
+/** Resolve the Abaqus bridge plugin that abaqus_launch_cae loads via `startup=`.
+ *
+ *  Prefer the PURE-KERNEL bridge (`cae_bridge_plugin.py`, no abaqusGui) so the
+ *  bridge can actually auto-start from a `startup=` file — the stock
+ *  abaqus_mcp_plugin.py imports abaqusGui and fails with "Module abaqusGui can
+ *  only be used in Abaqus/CAE GUI" in the startup kernel engine (verified).
+ *
+ *  Resolution order:
+ *    1. env ABAQUS_MCP_HOME (dir named `cae_bridge_plugin.py` first, then
+ *       abaqus_mcp_plugin.py)
+ *    2. this plugin's own `bridge/cae_bridge_plugin.py` (shipped with the pkg)
+ *    3. ~/.abaqus-mcp/cae_bridge_plugin.py
+ *    4. ~/.abaqus-mcp/abaqus_mcp_plugin.py (stock fallback)
+ *    5. an explicit bridgePluginPath passed via config.
+ */
 function defaultBridgePluginPath(): string {
   const home = os.homedir()
+  const explicit = process.env.BRIDGE_PLUGIN_PATH
   const candidates = [
-    process.env.ABAQUS_MCP_HOME,
+    explicit,
+    path.join(home, '.abaqus-mcp', 'cae_bridge_plugin.py'),
+    // shipped with the package — resolve relative to this module's dir up to the
+    // package root, then into bridge/. ESM: derive the dir via import.meta.url.
+    path.resolve(fileURLToPath(new URL('.')), '..', 'bridge', 'cae_bridge_plugin.py'),
     path.join(home, '.abaqus-mcp', 'abaqus_mcp_plugin.py'),
   ].filter(Boolean) as string[]
   for (const c of candidates) {

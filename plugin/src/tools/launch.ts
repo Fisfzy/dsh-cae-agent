@@ -158,7 +158,7 @@ export function registerLaunch(ctx: Context, config: LaunchConfig): void {
           'import os, sys, json, __main__',
           `plugin = ${JSON.stringify(pluginPath)}`,
           `if not getattr(__main__, "_ABAQUS_MCP_MENU_REGISTERED", False):`,
-          '    with open(plugin, "r") as _h:',
+          '    with open(plugin, "r", encoding="utf-8") as _h:',
           '        exec(compile(_h.read(), plugin, "exec"), __main__.__dict__)',
           'try:',
           '    msg = __main__.mcp_start()',

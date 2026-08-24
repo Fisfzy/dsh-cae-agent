@@ -21,6 +21,7 @@
     "lib",
     "src",
     "client",
+    "bridge",
     "scripts",
     "cordis.patch.yml",
     "README.md",
