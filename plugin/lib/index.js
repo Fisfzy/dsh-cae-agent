@@ -61,7 +61,15 @@ function defaultAbaqusCommand() {
     const env = process.env.ABAQUS_COMMAND;
     if (env)
         return env;
-    // Probe common SIMULIA install layouts (glob the version dir).
+    // Prefer the `abaqus` launcher (abaqus.bat) resolved via `where` — it is the
+    // entry that correctly accepts `cae script=<file>` (verified end-to-end).
+    // Spawning ABQcaeK.exe directly does NOT process the `cae script=` option the
+    // same way, so the bridge never opens. abaqus.bat wraps the command with the
+    // right environment/argument handling.
+    const fromPath = resolveOnPath('abaqus') ?? resolveOnPath('abaqus.bat');
+    if (fromPath)
+        return fromPath;
+    // Fallback: probe SIMULIA install layouts for the raw ABQcaeK.exe.
     try {
         const simulia = process.env.SIMULIA ?? 'D:\\SIMULIA';
         for (const base of [simulia, 'C:\\SIMULIA']) {
@@ -70,7 +78,6 @@ function defaultAbaqusCommand() {
             const exe = path.join(base, 'EstProducts', '2024', 'win_b64', 'code', 'bin', 'ABQcaeK.exe');
             if (fs.existsSync(exe))
                 return exe;
-            // fall back: any EstProducts/<ver>/win_b64/.../ABQcaeK.exe
             const est = path.join(base, 'EstProducts');
             if (fs.existsSync(est)) {
                 for (const ver of fs.readdirSync(est)) {
@@ -82,10 +89,6 @@ function defaultAbaqusCommand() {
         }
     }
     catch { /* keep looking */ }
-    // Resolve `abaqus` (or `abaqus.bat`) to a real path via `where`.
-    const fromPath = resolveOnPath('abaqus') ?? resolveOnPath('abaqus.bat');
-    if (fromPath)
-        return fromPath;
     return 'abaqus';
 }
 /** Resolve the Abaqus bridge plugin that abaqus_launch_cae loads via `startup=`.

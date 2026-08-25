@@ -182,11 +182,15 @@ export function registerLaunch(ctx: Context, config: LaunchConfig): void {
         // ignores it, so the bridge never opened). `script=` runs the file in
         // the CAE kernel; the keepalive tail keeps the bridge accept thread
         // alive.
+        // On Windows a `.bat`/`.cmd` launcher must run through the shell (cmd.exe);
+        // Node's spawn won't execute a batch file directly. `shell: true` lets the
+        // os resolve abaqus.bat (the entry that correctly handles `cae script=`).
         const child = spawn(abqCmd, ['cae', `script=${startupFile}`], {
           cwd: ws,
           detached: true,
           stdio: 'ignore',
           windowsHide: true,
+          shell: process.platform === 'win32',
         })
         // Detached + unref so the launched CAE outlives this tool call.
         child.unref()
