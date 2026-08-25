@@ -154,17 +154,25 @@ export function registerLaunch(ctx: Context, config: LaunchConfig): void {
         const ws = path.resolve(args.workspaceDir || config.workspaceDir)
         fs.mkdirSync(ws, { recursive: true })
         const startupFile = path.join(ws, `abaqus_mcp_startup_${crypto.randomUUID().slice(0, 8)}.py`)
+        // Keep this startup process alive so the pure-kernel bridge's accept
+        // thread (non-daemon) is never reaped when the script body ends. The
+        // stock plugin stayed alive via the GUI thread / AFX timeout; the
+        // kernel bridge relies on this blocking loop. Without it the CAE
+        // startup unwinds, the child exits, and the bridge port disappears
+        // before waitForBridge sees it.
         const startupSource = [
-          'import os, sys, json, __main__',
+          'import os, sys, json, time, __main__',
           `plugin = ${JSON.stringify(pluginPath)}`,
           `if not getattr(__main__, "_ABAQUS_MCP_MENU_REGISTERED", False):`,
           '    with open(plugin, "r", encoding="utf-8") as _h:',
           '        exec(compile(_h.read(), plugin, "exec"), __main__.__dict__)',
           'try:',
           '    msg = __main__.mcp_start()',
-          '    print("ABAQUS_MCP_BRIDGE_STARTED " + json.dumps(msg))',
+          '    print("ABAQUS_MCP_BRIDGE_STARTED " + json.dumps(msg), flush=True)',
           'except Exception as _e:',
-          '    print("ABAQUS_MCP_BRIDGE_ERROR " + repr(_e))',
+          '    import traceback; print("ABAQUS_MCP_BRIDGE_ERROR " + repr(_e) + "\\n" + traceback.format_exc(), flush=True)',
+          'while True:',
+          '    time.sleep(3600)',
         ].join('\n')
         fs.writeFileSync(startupFile, startupSource, 'utf8')
 
