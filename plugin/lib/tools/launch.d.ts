@@ -13,7 +13,7 @@
  *   2. Write a startup file into the configured workspace that loads
  *      `abaqus_mcp_plugin.py` into `__main__` **and** calls `mcp_start()`,
  *      so the bridge opens automatically (no manual menu click).
- *   3. Spawn `abaqus <command> cae startup=<startup.py>` detached.
+ *   3. Spawn `abaqus <command> cae script=<startup.py>` detached.
  *   4. Poll the bridge port until it listens (respecting `exec.signal` and the
  *      `launchTimeoutMs` budget), then return the handle.
  */

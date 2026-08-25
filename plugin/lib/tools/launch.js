@@ -129,8 +129,13 @@ export function registerLaunch(ctx, config) {
                 '    time.sleep(3600)',
             ].join('\n');
             fs.writeFileSync(startupFile, startupSource, 'utf8');
-            // 4) Spawn Abaqus/CAE detached with the startup file.
-            const child = spawn(abqCmd, ['cae', `startup=${startupFile}`], {
+            // 4) Spawn Abaqus/CAE detached with the startup script. `script=` is the
+            // Abaqus parameter that actually executes a Python file after CAE boots
+            // (verified: `startup=` is NOT a valid `cae` option — Abaqus silently
+            // ignores it, so the bridge never opened). `script=` runs the file in
+            // the CAE kernel; the keepalive tail keeps the bridge accept thread
+            // alive.
+            const child = spawn(abqCmd, ['cae', `script=${startupFile}`], {
                 cwd: ws,
                 detached: true,
                 stdio: 'ignore',
@@ -157,7 +162,7 @@ export function registerLaunch(ctx, config) {
             }
             if (!wait.ok) {
                 throw new Error(`Abaqus/CAE did not open its socket bridge within ${config.launchTimeoutMs}ms. ` +
-                    `Launched pid=${child.pid ?? '?'} from ${abqCmd}; check the Abaqus window / license. (startup=${startupFile})`);
+                    `Launched pid=${child.pid ?? '?'} from ${abqCmd}; check the Abaqus window / license. (script=${startupFile})`);
             }
             // 6) Report success.
             return {
