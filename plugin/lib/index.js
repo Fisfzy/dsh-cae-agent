@@ -106,17 +106,22 @@ function defaultAbaqusCommand() {
 function defaultBridgePluginPath() {
     const home = os.homedir();
     const explicit = process.env.BRIDGE_PLUGIN_PATH;
+    // This module lives in <pkg>/lib/; the shipped kernel bridge is at
+    // <pkg>/bridge/cae_bridge_plugin.py. Derive the package root's absolute path
+    // from this module's URL (ESM) so webServer resolution never sees an
+    // un-basable `new URL('.')` (which threw "Invalid URL" at load time and
+    // failed the whole dsh-cae-agent bundle).
+    const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+    const shippedBridge = path.resolve(moduleDir, '..', 'bridge', 'cae_bridge_plugin.py');
     const candidates = [
         explicit,
         path.join(home, '.abaqus-mcp', 'cae_bridge_plugin.py'),
-        // shipped with the package — resolve relative to this module's dir up to the
-        // package root, then into bridge/. ESM: derive the dir via import.meta.url.
-        path.resolve(fileURLToPath(new URL('.')), '..', 'bridge', 'cae_bridge_plugin.py'),
+        shippedBridge,
         path.join(home, '.abaqus-mcp', 'abaqus_mcp_plugin.py'),
     ].filter(Boolean);
     for (const c of candidates) {
         try {
-            if (fs.existsSync(c))
+            if (c && fs.existsSync(c))
                 return c;
         }
         catch { /* keep looking */ }
