@@ -1,5 +1,9 @@
 # dsh-cae-agent
 
+[![dshfind](https://dshfind.com/api/badge/Fisfzy/dsh-cae-agent?lang=zh)](https://dshfind.com/zh/plugins/Fisfzy/dsh-cae-agent?ref=badge)
+
+[![dshfind](https://dshfind.com/api/card/Fisfzy/dsh-cae-agent?lang=zh)](https://dshfind.com/zh/plugins/Fisfzy/dsh-cae-agent?ref=badge)
+
 DSH（DeepSeek Harness）的 Abaqus/CAE Cordis 插件：通过 DSH **原生工具**直接操作本机正在运行的 Abaqus/CAE 会话，覆盖完整建模链。
 
 基于 MIT 许可的 [CAE-Agent-Hub](https://github.com/Cai-aa/CAE-Agent-Hub) 与 [Abaqus-Control-MCP](https://github.com/Whfkl/Abaqus-Control-MCP) 改造。详见 [NOTICE](NOTICE)。
